@@ -1,5 +1,5 @@
 """Server, ServerCommands etc."""
-import logging, sys, time, pickle, os, signal, httplib2, asyncio, random, a107, zmq, zmq.asyncio, inspect
+import logging, sys, time, pickle, os, signal, httplib2, asyncio, random, a107, zmq, zmq.asyncio, inspect, copy
 from colored import fg, bg, attr
 from . import whatever
 from .commands import _Commands
@@ -120,6 +120,7 @@ class Server(object):
         self.__logger = None
         self.__flag_to_stop = False # stop at next chance
         self.__recttask = None
+        self.__sleeptasks = []
         self.ctx = None  # zmq context
         self.sck_rep = None  # ZMQ_REP socket
 
@@ -166,12 +167,6 @@ class Server(object):
             for name, method in whatever.get_methods(cmd, flag_protected=True):
                 self.commands_by_name[name] = _ServerCommand(method)
 
-    # generic
-    def stop(self):
-        """Signals to stop when possible."""
-        self.__stop()
-
-    # specific
     def get_configuration(self):
         """Returns tabulatable (rows, ["key", "value"] self.cfg + additional in-server information."""
         # TODO return as dict, but create a nice visualization at the client side
@@ -179,7 +174,18 @@ class Server(object):
         ret = list(_ret.items()), ["key", "value"]
         return ret
 
-    # generic
+    def wake_up(self):
+        """Cancel all "sleepings"."""
+        for sleeptask in copy.copy(self.__sleeptasks): sleeptask.cancel()
+        self.__sleeptasks = []
+
+    async def sleep(self, to_wait):
+        sleeptask = asyncio.create_task(asyncio.sleep(to_wait))
+        self.__sleeptasks.append(sleeptask)
+        try: await sleeptask
+        except asyncio.CancelledError: pass
+        finally: self.__sleeptasks.remove(sleeptask)
+
     async def run(self):
         def _ctrl_z_handler(signum, frame):
             """... we need this to handle the Ctrl+Z."""
@@ -222,12 +228,12 @@ class Server(object):
             self.cfg.logger.exception(f"Server '{self.cfg.prefix}' crashed!")
             raise
         finally:
-            self.cfg.logger.debug("serverlib.__serverloop() finalliessssssssssssssssssssssssss")
+            self.cfg.logger.debug(f"{self.__class__.__name__}.__serverloop() finalliessssssssssssssssssssssssss")
+            self.wake_up()
             self.__state = ST_STOPPED
             self.sck_rep.close()
             self.ctx.destroy()
             await self._on_destroy()
-
 
     def __bind_rep(self):
         sck_rep = self.sck_rep = self.ctx.socket(zmq.REP)
@@ -269,7 +275,6 @@ class Server(object):
     def __stop(self):
         self.__flag_to_stop = True
 
-    # #generic
     def __parse_statement(self, st):
         """Parses statement into usable information
 
