@@ -19,7 +19,7 @@ class BaseConfig:
 
     @property
     def prefix(self):
-        """Suffix for filenames. Defaults to self.applicationname."""
+        """Prefix for filenames. Defaults to self.applicationname."""
         return self.__prefix if self.__prefix is not None else self.applicationname
 
     @prefix.setter
@@ -71,11 +71,14 @@ class BaseConfig:
                                            level=self.logginglevel)
         return self.__logger
 
-    def __init__(self, applicationname=None, configdir=None, flag_log_file=None, flag_log_console=False, datadir=None,
-                 host=None, port=None, logginglevel=logging.INFO, prefix=None, suffix=None):
+    def __init__(self, applicationname=None, configdir=None, flag_log_file=None, flag_log_console=None, datadir=None,
+                 host=None, port=None, logginglevel=None, prefix=None, suffix=None, description=None):
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.suffix"
         assert self.defaulthost is not None, f"Forgot to set {self.__class__.__name__}.defaulthost"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
+        if logginglevel is None: logginglevel = a107.logging_level
+        if flag_log_console is None: flag_log_console = a107.flag_log_console
+        if flag_log_file is None: flag_log_file = a107.flag_log_file
         self.__configdir = configdir
         self.__datadir = datadir
         self.__logger = None
@@ -86,6 +89,7 @@ class BaseConfig:
         self.host = host
         self.port = port
         self.logginglevel = logginglevel
+        self.description = description
         self.__prefix = prefix
         self.__suffix = suffix
 
@@ -107,23 +111,44 @@ class BaseConfig:
         if not os.path.isdir(d):
             a107.ensurepath(d)
             self.master.logger.info(f"Created directory '{d}'")
-        h = configobj.ConfigObj(configpath, create_empty=True, unrepr=True)
+        h = self.__get_configobj()
         for attrname, value in h.items():
             setattr(self, attrname, value)
+
+    def get(self, attrname, default=None):
+        """Retrieves attribute with default option."""
+        return getattr(self, attrname) if hasattr(self, attrname) else default
+
+    def set(self, attrname, value):
+        """Sets value both as self's attribute and within the config file."""
+        setattr(self, attrname, value)
+        h = self.__get_configobj()
+        h[attrname] = value
+        h.write()
+
+    def filepath(self, suffix):
+        """Builds path to file <datadir>/<prefix><suffix>.
+
+        Example of suffix: "-vars.pickle"
+        """
+        return os.path.join(self.datadir, f"{self.prefix}{suffix}")
+
+    def __get_configobj(self):
+        return configobj.ConfigObj(self.configpath, create_empty=True, unrepr=True)
 
 
 class ServerConfig(BaseConfig):
     """Configuration for servers
 
     Args:
-        sleepinterval: (seconds) time to sleep after each interation of main loop
+        sleepinterval: (seconds) time to sleep if didn't receive any requests at cycle
     """
 
     defaultsuffix = "server"
     defaulthost = "*"
     default_flag_log_file = True
 
-    def __init__(self, *args, sleepinterval=0.1, servername=None, **kwargs):
+    def __init__(self, *args, sleepinterval=0.001, servername=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.sleepinterval = sleepinterval
         self.__servername = servername

@@ -1,11 +1,9 @@
-import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, traceback, time
+import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time
 from colored import fg, attr
 from . import whatever
-
-import csv
+import serverlib as sl, shlex
 
 __all__ = ["Client"]
-
 TIMEOUT = 30000  # miliseconds to wait until server replies
 COLOR_OKGREEN = fg("green")
 COLOR_FAIL = fg("red")
@@ -16,11 +14,11 @@ COLOR_INPUT = fg("orange_1")
 
 
 class Client(object):
-    """
-    PannaClient
+    """Client class."""
 
-    Client connects to URL and sends command through execute().
-    """
+    @property
+    def state(self):
+        return self.__state
 
     @property
     def logger(self):
@@ -45,12 +43,28 @@ class Client(object):
         return self.__socket
 
     def __init__(self, cfg, cmd=None):
+        self.__state = sl.ST_INIT
         self.cfg = cfg
         self.__cmd = None
         self.cmd = cmd
+        if cmd is not None:
+            cmd.master = self
         self.__ctx = None
         self.__socket = None
         self.flag_needs_to_reset_colors = False
+        self.__state = sl.ST_ALIVE
+
+    def __del__(self):
+        # # ==== BEGIN DEBUG ====
+        # n = 80; shaito = "D"*n; cocodrilo = f" {self.__class__.__name__}, '{self.cfg.prefix}' "; nn = int((n-len(cocodrilo))/2)
+        # print(shaito)
+        # print("D"*nn+cocodrilo+"D"*(n-nn-len(cocodrilo)))
+        # print(shaito)
+        # # ==== END DEBUG ====
+        self.__close()
+
+    def connect(self):
+        _ = self.socket
 
     def close(self):
         self.__close()
@@ -74,14 +88,13 @@ class Client(object):
                 ret = await self.execute_server(st)
         return ret
 
-    async def execute_server(self, st, *args_):
+    async def execute_server(self, st, *args_, **kwargs_):
         """
         Sends statement to server, receives reply, unpickles and returns.
 
         Args:
-            st: str in the form "<command> <data>". If *args is passed, statement
-                       won't be allowed to have a space (i.e., " ")
-            *args_: if passed, will be pickled and concatenated with statement using a " " separator
+            st: str in the form "<command> <data>".
+            *args_: alternatively, additional arguments.
 
         Returns:
             ret: either result or exception raised on the server (does not raise)
@@ -93,12 +106,12 @@ class Client(object):
         except ValueError: commandname = st
         else: commandname = st[:index]
         if index is not None: sdata = st[index+1:]
-        args = _str2args(sdata)
+        args, kwargs = _str2args(sdata)
         # Extends argument list with additional arguments
-        if args_:
-            args.extend(args_)
+        if args_: args.extend(args_)
+        if kwargs_: kwargs.update(kwargs_)
         # Mounts binary statement and sends off
-        bst = commandname.encode()+b" "+pickle.dumps(args)
+        bst = commandname.encode()+b" "+pickle.dumps([args, kwargs])
         return await self.execute_bytes(bst)
 
     async def execute_bytes(self, bst):
@@ -113,13 +126,15 @@ class Client(object):
         try:
             await self.socket.send(bst)
             b = await self.socket.recv()
-        except zmq.Again:
-            # Recreating socket in case of timeout
+        except zmq.Again as e:
+            # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
-            self.__make_socket()
+            self.__del_socket()
             raise
+
         ret = self.__process_result(b)
         return ret
+
 
     async def run(self):
         """Will run client and automatically exit the program.
@@ -131,6 +146,7 @@ class Client(object):
         self.__set_historylength()
         print(await self.execute_server("_get_welcome"))  # Retrieves and prints welcome message from server
         srvprefix = await self.execute_server("_get_prefix") # Gets server name in order to compose local prompt
+        self.__state = sl.ST_LOOP
         try:
             while True:
                 self.flag_needs_to_reset_colors = True
@@ -144,7 +160,7 @@ class Client(object):
         except KeyboardInterrupt:
             pass
         finally:
-            pass
+            self.__state = sl.ST_STOPPED
 
     async def __execute_in_loop(self, st):
         """Executes and prints result."""
@@ -159,8 +175,7 @@ class Client(object):
         except Exception as e:
             yoda("That work did not.", False)
             my_print_exception(e)
-            # Cannot log as error, otherwise the traceback always gets printed to the console
-            whatever.log_exception(self.logger, e, f"Error executing statement '{st}'\n")
+            # I don't need to pollute the client interface. The traceback is not informative anyway, since it would start from this line, which has notthing to do with where the error occurred in the server a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
         else:
             self.__print_result(ret)
 
@@ -207,14 +222,18 @@ class Client(object):
             whatever.myprint(ret)
 
     def __make_socket(self):
-        if self.__socket is not None:
-            self.__socket.setsockopt(zmq.LINGER, 0)
-            self.__socket.close()
+        self.__del_socket()
         self.__socket = self.__ctx.socket(zmq.REQ)
         self.__socket.setsockopt(zmq.SNDTIMEO, TIMEOUT)
         self.__socket.setsockopt(zmq.RCVTIMEO, TIMEOUT)
-        print(f"Connecting ``{self.cfg.applicationname}'' to {self.cfg.url} ...")
+        print(f"Connecting ``{self.cfg.prefix}'' to {self.cfg.url} ...")
         self.__socket.connect(self.cfg.url)
+
+    def __del_socket(self):
+        if self.__socket is not None:
+            self.__socket.setsockopt(zmq.LINGER, 0)
+            self.__socket.close()
+            self.__socket = None
 
     def __make_context(self):
         self.__ctx = zmq.asyncio.Context()
@@ -237,7 +256,7 @@ class Client(object):
         if index is not None: sdata = st[index+1:]
         args = _str2args(sdata)
         method = self.cmd.__getattribute__(commandname)
-        ret = await method(*args)
+        ret = await method(*args[0], **args[1])
         return ret
 
     def __clienthelp(self, what):
@@ -262,18 +281,21 @@ class Client(object):
         return ret
 
     def __close(self):
-        self.__socket.close()
-        self.__ctx.destroy()
+        if self.__socket is not None:
+            self.__del_socket()
+            self.__ctx.destroy()
 
 
 def _str2args(sargs):
-    """Converts string into a list of arguments using the CSV library."""
-    ret = []
-    if sargs:
-        reader = csv.reader([sargs], delimiter=" ", skipinitialspace=True)
-        ret = [[x.strip() for x in row] for row in reader][0]
-    return ret
-
+    """Converts string into a list of arguments using the CSV library. Update: it now parses kwargs as well"""
+    args, kwargs = [], {}
+    for part in shlex.split(sargs):
+        try:
+            idx = part.index("=")
+            kwargs[part[:idx]] = part[idx+1:]
+        except ValueError:
+            args.append(part)
+    return args, kwargs
 
 def yoda(s, happy=True):
     print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")

@@ -14,17 +14,18 @@ class _ServerCommand:
         pars = inspect.signature(method).parameters
         flag_bargs = "bargs" in pars
         if flag_bargs and len(pars) > 1:
-            raise AssertionError(f"Method {cmd.__class__.__name__}.{name} has argument named 'bargs' which identifies it as a bytes-accepting method, but has extra arguments")
+            raise AssertionError(f"Method {self.name} has argument named 'bargs' which identifies it as a bytes-accepting method, but has extra arguments")
         self.flag_bargs = flag_bargs
 
 
-class ServerCommands(_Commands):
+class   ServerCommands(_Commands):
     """
     Class that implements all server-side "commands".
 
     Notes:
         - Subclass this to implement new commands
         - All arguments come as bytes
+        - Don't forget to make them all "async"
     """
     name = None
     def __init__(self):
@@ -40,38 +41,41 @@ class ServerCommands(_Commands):
 class _EssentialServerCommands(ServerCommands):
     name = "essential"
 
-    def _get_welcome(self):
+    async def _get_welcome(self):
         return "\n".join(a107.format_slug(f"Welcome to the '{self.master.cfg.prefix}' server", random.randint(0, 2)))
 
-    def _get_name(self):
+    async def _get_name(self):
         """Returns the server application name."""
         return self.cfg.applicationname
 
-    def _get_prefix(self):
+    async def _get_prefix(self):
         """Returns the server prefix."""
         return self.cfg.prefix
 
 
 class BasicServerCommands(ServerCommands):
     name = "basic"
-    def help(self, what=None):
+    async def help(self, what=None):
         """Gets summary of available server commands or help on specific command."""
         if what is None:
             name_method = [(k, v.method) for k, v in self.master.commands_by_name.items()]
-            aname = self.master.cfg.applicationname
-            lines = [aname, "="*len(aname), ""]+whatever.format_name_method(name_method)
+            aname = self.master.cfg.prefix
+            lines = [aname, "="*len(aname)]
+            if self.master.cfg.description: lines.extend(whatever.format_description(self.master.cfg.description))
+            lines.append("")
+            lines.extend(whatever.format_name_method(name_method))
             return "\n".join(lines)
         else:
             if what not in self.master.commands_by_name:
                 raise ValueError("Invalid method: '{}'. Use 'help()' to list methods.".format(what))
             return whatever.format_method(self.master.commands_by_name[what].method)
 
-    def stop(self):
+    async def stop(self):
         """Stops server. """
         self.master.stop()
         return "As you wish."
 
-    def get_configuration(self):
+    async def get_configuration(self):
         """Returns dict containing configuration information.
 
         Returns:
@@ -79,13 +83,9 @@ class BasicServerCommands(ServerCommands):
         """
         return self.master.get_configuration()
 
-    def ping(self):
+    async def ping(self):
         """Returns "pong"."""
         return "pong"
-
-    def get_name(self):
-        """Returns the server application name."""
-        return self.cfg.applicationname
 
 
 # Server states
@@ -119,6 +119,7 @@ class Server(object):
         # More init
         self.__logger = None
         self.__flag_to_stop = False # stop at next chance
+        self.__recttask = None
         self.ctx = None  # zmq context
         self.sck_rep = None  # ZMQ_REP socket
 
@@ -138,14 +139,14 @@ class Server(object):
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤
     # └─┘ └┘ └─┘┴└─┴└─┴─┴┘└─┘  ┴ ┴└─┘
 
-    def _on_destroy(self):
+    async def _on_destroy(self):
         pass
 
-    def _on_run(self):
+    async def _on_run(self):
         pass
 
     # #generic
-    def _after_cycle(self):
+    async def _after_cycle(self):
         pass
 
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
@@ -173,8 +174,8 @@ class Server(object):
     # specific
     def get_configuration(self):
         """Returns tabulatable (rows, ["key", "value"] self.cfg + additional in-server information."""
+        # TODO return as dict, but create a nice visualization at the client side
         _ret = self.cfg.to_dict()
-        _ret.update({})
         ret = list(_ret.items()), ["key", "value"]
         return ret
 
@@ -188,7 +189,9 @@ class Server(object):
         self.cfg.read_configfile()
         self.ctx = zmq.asyncio.Context()
         # Automatically figures out all methods containing the word "loop" in them
-        gathered = [getattr(self, attrname)() for attrname in dir(self) if "loop" in attrname]
+        attrnames = [attrname for attrname in dir(self) if "loop" in attrname]
+        self.logger.debug(f"About to await on {attrnames}")
+        gathered = [getattr(self, attrname)() for attrname in attrnames]
         await asyncio.gather(*gathered)
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
@@ -198,46 +201,54 @@ class Server(object):
     async def __serverloop(self):
         a107.ensurepath(self.cfg.datadir)
         self.__bind_rep()
-        self._on_run()
+        await self._on_run()
         self.__state = ST_LOOP
         try:
             while True:
                 try:
-                    await self.__recv_send()
+                    did_sth = await self.__recv_send()
                     if self.__check_stop(): break
-                    self._after_cycle()
-                    await asyncio.sleep(0.001)
+                    await self._after_cycle()
+                    if not did_sth:
+                        # print(f"SLEEPING {self.cfg.sleepinterval} seconds because didn't do shit")
+                        if self.cfg.sleepinterval > 0:
+                            await asyncio.sleep(self.cfg.sleepinterval)
+                    else:
+                        pass
+                        # print("I ACTUALLY DID SUM SHIT")
                 except KeyboardInterrupt:
                     self.__stop()
         except:
-            self.cfg.logger.exception(f"Server '{self.cfg.applicationname}' crashed!")
+            self.cfg.logger.exception(f"Server '{self.cfg.prefix}' crashed!")
             raise
         finally:
+            self.cfg.logger.debug("serverlib.__serverloop() finalliessssssssssssssssssssssssss")
             self.__state = ST_STOPPED
-            self._on_destroy()
-            self.cfg.logger.debug("Destroying zmq shit")
             self.sck_rep.close()
             self.ctx.destroy()
+            await self._on_destroy()
+
 
     def __bind_rep(self):
         sck_rep = self.sck_rep = self.ctx.socket(zmq.REP)
-        logmsg = f"Binding ``{self.cfg.applicationname}'' (REP) to {self.cfg.url    } ..."
+        logmsg = f"Binding ``{self.cfg.prefix}'' (REP) to {self.cfg.url    } ..."
         self.cfg.logger.info(logmsg)
         if not self.cfg.flag_log_console:
-            # Prints something if not logging to console, so I know it is not just a frozen program
-            print(logmsg)
+            print(logmsg) # Prints it if not logging to console, so I know it is not just a frozen program
         sck_rep.bind(self.cfg.url)
 
     async def __recv_send(self):
+        """Returns whether did sth."""
         try:
-            st = await self.sck_rep.recv(flags=zmq.NOBLOCK)
+            st = await self.sck_rep.recv()
             commandname, has_data, data, command, exception = self.__parse_statement(st)
             if exception: ret = exception
-            else: ret = self.__execute_command(command.method, data)
+            else: ret = await self.__execute_command(command.method, data)
             msg = pickle.dumps(ret)
             await self.sck_rep.send(msg)
         except zmq.Again:
-            time.sleep(self.cfg.sleepinterval)
+            ret = False  # time.sleep(self.cfg.sleepinterval)
+        return ret
 
     def __check_stop(self):
         ret = False
@@ -254,6 +265,7 @@ class Server(object):
             ret = True
         return ret
 
+    # TODO this is getting outdated, or I should cancel the send_recv() task, because it is currently blocking *for a long time*, so the main loop won't detect this soon.
     def __stop(self):
         self.__flag_to_stop = True
 
@@ -282,11 +294,14 @@ class Server(object):
         else: self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
         # Processes data
         if command:
-            data = [] if len(bdata) == 0 else [data] if command.flag_bargs else pickle.loads(bdata)
-            if not isinstance(data, list): exception = CommandError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
+            data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
+            if not isinstance(data, list):
+                exception = CommandError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
+            elif len(data) != 2 or type(data[0]) != list or type(data[1]) != dict:
+                exception = CommandError("Data must unpickle to a structure like this: [[...], {...}]")
         return commandname, has_data, data, command, exception
 
-    def __execute_command(self, method, data):
+    async def __execute_command(self, method, data):
         """Processes the statement received from client.
 
         Args:
@@ -297,9 +312,9 @@ class Server(object):
             result returned by method, or the raised exception (does not raise, returns the exception instead)
         """
         try:
-            ret = method(*data)
+            ret = await method(*data[0], **data[1])
         except Exception as e:
-            whatever.log_exception(self.logger, e, f"Error executing '{method.__name__}'")
+            a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
             ret = e
         return ret
 

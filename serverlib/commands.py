@@ -8,8 +8,13 @@ class _Commands(object):
     def cfg(self):
         return self.master.cfg
 
+    @property
+    def logger(self):
+        return self.master.cfg.logger
+
     def __init__(self):
         self.master = None
+
 
 class ClientCommands(_Commands):
     """

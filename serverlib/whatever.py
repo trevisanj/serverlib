@@ -1,27 +1,24 @@
 """This is the serverlib internal API."""
-import re, textwrap, a107, inspect, traceback
+import re, textwrap, a107, inspect
 from colored import fg, attr
 
 
-__all__ = ["hopo2url", "myprint", "get_methods", "get_commandnames", "format_name_method",
-           "format_method", "cfg2str", "cfg2dict", "log_exception"]
-
-
-def log_exception(logger, e, title):
-    """Standard way to log an exception.
-
-    I found out that apparently the console is always polluted if we call logger.exception(), so I am calling
-    ...info() instead."""
-    logger.info(title+a107.str_exc(e)+"\n"+traceback.format_exc())
+__all__ = ["hopo2url", "myprint", "get_methods", "get_commandnames", "format_name_method", "format_description",
+           "format_method", "cfg2str", "cfg2dict"]
 
 
 def format_name_method(name_method):
-    """Formats name and method for help printing."""
+    """Formats name and method for help printing. Returns in the form of list."""
     if len(name_method) == 0:
         return []
     maxlen = max([len(x[0]) for x in name_method])
     return ["{}{:>{}}{} -- {}".format(attr("bold"), name, maxlen, attr("reset"), a107.get_obj_doc0(method))
             for name, method in name_method]
+
+
+def format_description(description):
+    """Formats name and method for help printing. Returns in the form of list."""
+    return [f"{fg('light_yellow')}{description}{attr('reset')}"]
 
 
 def format_method(method):

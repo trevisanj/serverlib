@@ -7,28 +7,28 @@ This server will provide you some words of wisdom + some stupid bonus features."
 
 class FortuneCommands(serverlib.ServerCommands):
     name = "fortune"
-    def random_name(self):
+    async def random_name(self):
         """Generates a random human name."""
         return a107.random_name()
 
-    def fortune(self):
+    async def fortune(self):
         """Fortune teller for the codependent."""
         return "\n".join(textwrap.wrap(ra.choice(FORTUNE), 70))
 
-    def random(self):
+    async def random(self):
         return ra.random()
 
     random.__doc__ = ra.random.__doc__
 
-    def randint(self, a, b):
+    async def randint(self, a, b):
         return ra.randint(int(a), int(b))
 
     randint.__doc__ = ra.randint.__doc__
 
-    def choice(self, bargs):
+    async def choice(self, bargs):
         """Returns one of the arguments passed randomly chosen."""
 
-        return ra.choice(self.to_list(args))
+        return ra.choice(self.to_list(bargs))
 
 
 def main(args):
