@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import serverlib, a107, argparse, sys, asyncio
+import serverlib, a107, argparse, asyncio
 __doc__ = "Fortune Client"
 
 def main(args):

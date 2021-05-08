@@ -1,9 +1,10 @@
-import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time
+import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, shlex
 from colored import fg, attr
-from . import whatever
-import serverlib as sl, shlex
 
-__all__ = ["Client"]
+__all__ = ["Client", "ServerError"]
+
+tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
+
 TIMEOUT = 30000  # miliseconds to wait until server replies
 COLOR_OKGREEN = fg("green")
 COLOR_FAIL = fg("red")
@@ -13,7 +14,7 @@ COLOR_SAD = fg("blue")
 COLOR_INPUT = fg("orange_1")
 
 
-class Client(object):
+class Client(sl.WithCommands):
     """Client class."""
 
     @property
@@ -25,16 +26,6 @@ class Client(object):
         return self.cfg.logger
 
     @property
-    def cmd(self):
-        return self.__cmd
-
-    @cmd.setter
-    def cmd(self, value):
-        self.__cmd = value
-        if value is not None:
-            value.client = self
-
-    @property
     def socket(self):
         if self.__ctx is None:
             self.__make_context()
@@ -43,30 +34,30 @@ class Client(object):
         return self.__socket
 
     def __init__(self, cfg, cmd=None):
+        self.__inited = False
+        super().__init__()
         self.__state = sl.ST_INIT
         self.cfg = cfg
-        self.__cmd = None
-        self.cmd = cmd
-        if cmd is not None:
-            cmd.master = self
-        self.__ctx = None
-        self.__socket = None
         self.flag_needs_to_reset_colors = False
+        if cmd is not None: self.attach_cmd(cmd)
         self.__state = sl.ST_ALIVE
+        self.__ctx, self.__socket = None, None
+        self.__inited = True
 
     def __del__(self):
-        # # ==== BEGIN DEBUG ====
-        # n = 80; shaito = "D"*n; cocodrilo = f" {self.__class__.__name__}, '{self.cfg.prefix}' "; nn = int((n-len(cocodrilo))/2)
-        # print(shaito)
-        # print("D"*nn+cocodrilo+"D"*(n-nn-len(cocodrilo)))
-        # print(shaito)
-        # # ==== END DEBUG ====
+        """It is essential to close the zmq stuff, otherwise the async loop event hangs forever."""
+        if self.__inited: self.__close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
         self.__close()
 
-    def connect(self):
+    async def connect(self):
         _ = self.socket
 
-    def close(self):
+    async def close(self):
         self.__close()
 
     async def execute(self, st):
@@ -126,7 +117,7 @@ class Client(object):
         try:
             await self.socket.send(bst)
             b = await self.socket.recv()
-        except zmq.Again as e:
+        except zmq.Again:
             # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
             self.__del_socket()
@@ -134,7 +125,6 @@ class Client(object):
 
         ret = self.__process_result(b)
         return ret
-
 
     async def run(self):
         """Will run client and automatically exit the program.
@@ -167,21 +157,22 @@ class Client(object):
         from serverlib.server import CommandError
         try:
             ret = await self.execute(st)
-        except CommandError as e:
+        except (CommandError, ServerError) as e:
             # Here we treat specific exceptions raised by the server
             yoda("That work did not.", False)
             my_print_exception(e)
-            # self.logger.exception(f"Error executing statement '{st}'")
         except Exception as e:
             yoda("That work did not.", False)
             my_print_exception(e)
-            # I don't need to pollute the client interface. The traceback is not informative anyway, since it would start from this line, which has notthing to do with where the error occurred in the server a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
+            # self.logger.exception(f"Error executing statement '{st}'")
+            a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
         else:
             self.__print_result(ret)
 
     def __intercept_exit(self):
         # This one gets called at Ctrl+C, but ...
         def _atexit():
+            a107.ensure_path()
             readline.write_history_file(self.cfg.historypath)
             self.__close()
             if self.flag_needs_to_reset_colors:
@@ -210,30 +201,41 @@ class Client(object):
 
     def __print_result(self, ret):
         yoda("Happy I am.", True)
-        flag_defaultprint = False
+        flag_defaultprint = True
         if isinstance(ret, str):
             print(ret)
-        # Tries to detect "tabulate-like" (rows, headers) arguments
+            flag_defaultprint = False
         elif isinstance(ret, tuple) and len(ret) == 2 and isinstance(ret[0], list) and isinstance(ret[1], list):
+            # Tries to detect "tabulate-like" (rows, headers) arguments
             print(tabulate.tabulate(*ret))
+            flag_defaultprint = False
+        elif isinstance(ret, list):
+            if len(ret) > 0:
+                if isinstance(ret[0], dict):
+                    a107.print_girafales(tabulate.tabulate([list(row.values()) for row in ret], list(ret[0].keys())))
+                    flag_defaultprint = False
+                else:
+                    print("\n".join([str(x) for x in ret]))  # Experimental: join list elements with "\n"
+                    flag_defaultprint = False
+        elif isinstance(ret, dict):
+            if len(ret) > 0:
+                first = next(iter(ret.values()))
+                if isinstance(first, dict):  # dict of dicts: converts key to column
+                    rows = [[k, *v.values()] for k, v in ret.items()]; header = ["key", *first.keys()]
+                    a107.print_girafales(tabulate.tabulate(rows, header))
+                    flag_defaultprint = False
         else:
             flag_defaultprint = True
         if flag_defaultprint:
-            whatever.myprint(ret)
+            sl.myprint(ret)
 
     def __make_socket(self):
         self.__del_socket()
         self.__socket = self.__ctx.socket(zmq.REQ)
         self.__socket.setsockopt(zmq.SNDTIMEO, TIMEOUT)
         self.__socket.setsockopt(zmq.RCVTIMEO, TIMEOUT)
-        print(f"Connecting ``{self.cfg.prefix}'' to {self.cfg.url} ...")
+        print(f"Connecting ``{self.cfg.prefix}(client)'' to {self.cfg.url} ...")
         self.__socket.connect(self.cfg.url)
-
-    def __del_socket(self):
-        if self.__socket is not None:
-            self.__socket.setsockopt(zmq.LINGER, 0)
-            self.__socket.close()
-            self.__socket = None
 
     def __make_context(self):
         self.__ctx = zmq.asyncio.Context()
@@ -251,40 +253,49 @@ class Client(object):
         try: index = st.index(" ")
         except ValueError: commandname = st
         else: commandname = st[:index]
-        if not commandname in whatever.get_commandnames(self.cmd):
+        if not commandname in self.commands_by_name:
             raise NotAClientCommand()
         if index is not None: sdata = st[index+1:]
         args = _str2args(sdata)
-        method = self.cmd.__getattribute__(commandname)
+        method = self.commands_by_name[commandname].method
         ret = await method(*args[0], **args[1])
         return ret
 
     def __clienthelp(self, what):
             if not what:
-                name_method = whatever.get_methods(self.cmd)
+                name_method = [(k, v.method) for k, v in self.commands_by_name.items() if not k.startswith("_")]
                 name_descr = [("?", "print this (client-side help)"),
                               ("help", "server-side help"),
                               ("exit", "exit client"),]
                 name_descr.extend([(name, a107.get_obj_doc0(method)) for name, method in name_method])
                 headline = "Client-side commands"
-                lines = [headline, "="*len(headline), ""]+whatever.format_name_method(name_method)
+                lines = [headline, "="*len(headline), ""]+sl.format_name_method(name_method)
                 return "\n".join(lines)
             else:
-                if what not in whatever.get_commandnames(self.cmd):
+                if what not in self.commands_by_name:
                     raise ValueError("Invalid method: '{}'. Use '?' to list client-side methods.".format(what))
-                return whatever.format_method(getattr(self.cmd, what))
+                return sl.format_method(self.commands_by_name[what].method)
 
     def __process_result(self, b):
         ret = pickle.loads(b)
         if isinstance(ret, Exception):
-            raise ret
+            raise ServerError(f"Error from server: ``{a107.str_exc(ret)}''")
         return ret
 
     def __close(self):
+        # print(f"{self.__class__.__name__} CLOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
         if self.__socket is not None:
             self.__del_socket()
             self.__ctx.destroy()
 
+    def __del_socket(self):
+        if self.__socket is not None:
+            try:
+                self.__socket.setsockopt(zmq.LINGER, 0)
+                self.__socket.close()
+            except zmq.ZMQError as e:
+                raise
+            self.__socket = None
 
 def _str2args(sargs):
     """Converts string into a list of arguments using the CSV library. Update: it now parses kwargs as well"""
@@ -296,6 +307,7 @@ def _str2args(sargs):
         except ValueError:
             args.append(part)
     return args, kwargs
+
 
 def yoda(s, happy=True):
     print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")
@@ -310,3 +322,6 @@ def my_print_exception(e):
 
 class NotAClientCommand(Exception):
     pass
+
+
+class ServerError(Exception): pass

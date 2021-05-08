@@ -1,10 +1,96 @@
 """This is the serverlib internal API."""
 import re, textwrap, a107, inspect
-from colored import fg, attr
+from colored import fg, attr, bg
 
 
 __all__ = ["hopo2url", "myprint", "get_methods", "get_commandnames", "format_name_method", "format_description",
-           "format_method", "cfg2str", "cfg2dict"]
+           "format_method", "cfg2str", "cfg2dict", "WithCommands", "Commands", "ClientCommands", "Command", "ServerCommands",
+           ]
+
+
+class Command:
+    def __init__(self, method):
+        self.method = method
+        self.name = method.__name__
+        pars = inspect.signature(method).parameters
+        # Note: flag_bargs is only effective on the server side
+        flag_bargs = "bargs" in pars
+        if flag_bargs and len(pars) > 1:
+            raise AssertionError(f"Method {self.name} has argument named 'bargs' which identifies it as a bytes-accepting method, but has extra arguments")
+        self.flag_bargs = flag_bargs
+
+
+class Commands(object):
+    _name = None
+
+    @property
+    def cfg(self):
+        return self.master.cfg
+
+    @property
+    def logger(self):
+        return self.master.cfg.logger
+
+    @staticmethod
+    def to_list(args):
+        """Converts bytes to list of strings."""
+        return [x for x in args.decode().split(" ") if len(x) > 0]
+
+    @property
+    def name(self):
+        if self._name: return self._name
+        return self.__class__.__name__
+
+    def __init__(self):
+        self.master = None
+
+
+class ClientCommands(Commands):
+    """
+    Client-side "commands" which translate to client.execute(...) (i.e., calls to the server)
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.master = None
+
+
+class ServerCommands(Commands):
+    """
+    Class that implements all server-side "commands".
+
+    Notes:
+        - Subclass this to implement new commands
+        - All arguments come as bytes
+        - Don't forget to make them all "async"
+    """
+
+
+class WithCommands:
+    """Server/Client ancestor."""
+
+    def __init__(self):
+        # list of ServerCommands objects
+        self.cmdcmd = []
+        # {cmd.name: cmd, ...}
+        self.cmd_by_name = {}
+        # {commandname: Command, ...}, synthesized from all self.cmdcmd
+        self.commands_by_name = {}
+
+    def attach_cmd(self, cmdcmd):
+        """Attaches one or more ServerCommands instances.
+
+        This method is not async because it was designed to be called from __init__().
+        """
+        if not isinstance(cmdcmd, (list, tuple)): cmdcmd = [cmdcmd]
+        for cmd in cmdcmd:
+            if not isinstance(cmd, Commands): raise TypeError(f"Invalid commands type: {cmd.__class__.__name__}")
+        for cmd in cmdcmd:
+            cmd.master = self
+            self.cmdcmd.append(cmd)
+            self.cmd_by_name[cmd.name] = cmd
+            for name, method in get_methods(cmd, flag_protected=True):
+                self.commands_by_name[name] = Command(method)
 
 
 def format_name_method(name_method):
@@ -89,6 +175,7 @@ def cfg2str(cfg, flag_clean=True):
 
             l.append(f"{attrname}={s}")
     return "\n".join(l)
+
 
 def cfg2dict(cfg, flag_clean=True):
     """Converts AnguishConfig object into string.

@@ -25,7 +25,7 @@ setup(
     author_email='juliotrevisan@gmail.com',
     url=f'https://github.com/trevisanj/{NAME}',
     keywords= ['wisdom'],
-    install_requires=["a107"],
+    install_requires=["zmq", "tabulate", "colored", "configobj",],
     python_requires = '>=3',
     scripts=scripts
 )

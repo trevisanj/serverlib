@@ -1,7 +1,5 @@
 """BaseConfig class"""
-import os, a107, configobj, logging
-from . import whatever
-
+import os, a107, configobj, serverlib as sl
 class BaseConfig:
     """Common functionality for ClientConfig and ServerConfig.
 
@@ -47,17 +45,17 @@ class BaseConfig:
     def configpath(self):
         location = self.configdir
         filename = f"{self.prefix}-{self.defaultsuffix}.cfg"
-        configpath = os.path.join(location, filename)
+        configpath = os.path.join(location, "cfg", filename)
         return configpath
 
     @property
     def logpath(self):
         """Returns the path to the '.log' file."""
-        return os.path.join(self.datadir, f"{self.prefix}-{self.defaultsuffix}.log")
+        return os.path.join(self.datadir, "log", f"{self.prefix}-{self.defaultsuffix}.log")
 
     @property
     def url(self):
-        return whatever.hopo2url((self.host, self.port), self.defaulthost)
+        return sl.hopo2url((self.host, self.port), self.defaulthost)
 
     @property
     def stoppath(self):
@@ -94,10 +92,10 @@ class BaseConfig:
         self.__suffix = suffix
 
     def __str__(self):
-        return whatever.cfg2str(self)
+        return sl.cfg2str(self)
 
     def to_dict(self):
-        return whatever.cfg2dict(self)
+        return sl.cfg2dict(self)
 
     def read_configfile(self):
         """This method populates self with attributes found within config file.
@@ -109,7 +107,7 @@ class BaseConfig:
         configpath = self.configpath
         d, f = os.path.split(configpath)
         if not os.path.isdir(d):
-            a107.ensurepath(d)
+            a107.ensure_path(d)
             self.master.logger.info(f"Created directory '{d}'")
         h = self.__get_configobj()
         for attrname, value in h.items():
