@@ -1,4 +1,4 @@
-import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, shlex
+import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, shlex, os, csv
 from colored import fg, attr
 
 __all__ = ["Client", "ServerError"]
@@ -97,7 +97,7 @@ class Client(sl.WithCommands):
         except ValueError: commandname = st
         else: commandname = st[:index]
         if index is not None: sdata = st[index+1:]
-        args, kwargs = _str2args(sdata)
+        args, kwargs = a107.str2args(sdata)
         # Extends argument list with additional arguments
         if args_: args.extend(args_)
         if kwargs_: kwargs.update(kwargs_)
@@ -172,7 +172,7 @@ class Client(sl.WithCommands):
     def __intercept_exit(self):
         # This one gets called at Ctrl+C, but ...
         def _atexit():
-            a107.ensure_path()
+            a107.ensure_path(os.path.split(self.cfg.historypath)[0])
             readline.write_history_file(self.cfg.historypath)
             self.__close()
             if self.flag_needs_to_reset_colors:
@@ -297,16 +297,13 @@ class Client(sl.WithCommands):
                 raise
             self.__socket = None
 
-def _str2args(sargs):
-    """Converts string into a list of arguments using the CSV library. Update: it now parses kwargs as well"""
-    args, kwargs = [], {}
-    for part in shlex.split(sargs):
-        try:
-            idx = part.index("=")
-            kwargs[part[:idx]] = part[idx+1:]
-        except ValueError:
-            args.append(part)
-    return args, kwargs
+
+
+
+
+
+
+
 
 
 def yoda(s, happy=True):

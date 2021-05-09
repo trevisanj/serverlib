@@ -162,4 +162,4 @@ class ClientConfig(BaseConfig):
     @property
     def historypath(self):
         """Returns the path to the history file."""
-        return os.path.join(self.datadir, f"{self.prefix}-{self.defaultsuffix}.history")
+        return os.path.join(self.datadir, "history", f"{self.prefix}-{self.defaultsuffix}.history")
