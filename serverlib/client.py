@@ -60,51 +60,27 @@ class Client(sl.WithCommands):
     async def close(self):
         self.__close()
 
-    async def execute(self, st):
-        """
-        Executes statement as if typed in the run console and returns result.
-
-        Args:
-            st: (str) statement
-        """
-        if st == "?" or st[:2] == "? ":
-            ret = self.__clienthelp(st[2:])
-        else:
-            is_clientcommand = True
-            try:
-                ret = await self.__process_as_clientcommand(st)
-            except NotAClientCommand:
-                is_clientcommand = False
-            if not is_clientcommand:
-                ret = await self.execute_server(st)
+    async def execute(self, statement, *args, **kwargs):
+        """Executes statemen; tries special, then client-side, then server-side."""
+        ret, statementdata = None, sl.parse_statement(statement, *args, **kwargs)
+        if not await self.__execute_client_special(statementdata):
+            try: ret = await self.__execute_client(statementdata)
+            except NotAClientCommand: ret = await self.__execute_server(statementdata)
         return ret
 
-    async def execute_server(self, st, *args_, **kwargs_):
-        """
-        Sends statement to server, receives reply, unpickles and returns.
+    async def execute_client(self, statement, *args, **kwargs):
+        """Executes statement; tries special, then client-side."""
+        ret, statementdata = None, sl.parse_statement(statement, *args, **kwargs)
+        if not await self.__execute_client_special(statementdata):
+            ret = await self.__execute_client(statementdata)
+        return ret
 
-        Args:
-            st: str in the form "<command> <data>".
-            *args_: alternatively, additional arguments.
-
-        Returns:
-            ret: either result or exception raised on the server (does not raise)
-        """
-        assert isinstance(st, str)
-        # Splits statement; converts arguments to list
-        sdata, index = "", None
-        try: index = st.index(" ")
-        except ValueError: commandname = st
-        else: commandname = st[:index]
-        if index is not None: sdata = st[index+1:]
-        args, kwargs = a107.str2args(sdata)
-        # Extends argument list with additional arguments
-        if args_: args.extend(args_)
-        if kwargs_: kwargs.update(kwargs_)
-        # Mounts binary statement and sends off
-        bst = commandname.encode()+b" "+pickle.dumps([args, kwargs])
-        return await self.execute_bytes(bst)
-
+    async def execute_server(self, statement, *args, **kwargs):
+        """Executes statement directly on the server."""
+        assert isinstance(statement, str)
+        statementdata = sl.parse_statement(statement, *args, **kwargs)
+        return await self.__execute_server(statementdata)
+    
     async def execute_bytes(self, bst):
         """Sents statement to server, receives reply, unpickles and returns.
 
@@ -122,16 +98,11 @@ class Client(sl.WithCommands):
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
             self.__del_socket()
             raise
-
         ret = self.__process_result(b)
         return ret
 
     async def run(self):
-        """Will run client and automatically exit the program.
-
-        Exits because it registers handlers to intercept Ctrl+C and Ctrl+Z.
-        """
-
+        """Will run client and automatically exit the program. Intercepts Ctrl+C and Ctrl+Z."""
         self.__intercept_exit()
         self.__set_historylength()
         print(await self.execute_server("_get_welcome"))  # Retrieves and prints welcome message from server
@@ -151,6 +122,27 @@ class Client(sl.WithCommands):
             pass
         finally:
             self.__state = sl.ST_STOPPED
+
+    # PRIVATE
+
+    async def __execute_server(self, statementdata):
+        commandname, args, kwargs = statementdata
+        bst = commandname.encode()+b" "+pickle.dumps([args, kwargs])
+        return await self.execute_bytes(bst)
+
+    async def __execute_client(self, statementdata):
+        commandname, args, kwargs = statementdata
+        if not commandname in self.commands_by_name: raise NotAClientCommand()
+        method = self.commands_by_name[commandname].method
+        ret = await method(*args, **kwargs)
+        return ret
+
+    async def __execute_client_special(self, statementdata):
+        commandname, args, kwargs = statementdata
+        ret = False
+        if commandname == "?":
+            ret = self.__clienthelp(*args, **kwargs)
+        return ret
 
     async def __execute_in_loop(self, st):
         """Executes and prints result."""
@@ -199,6 +191,52 @@ class Client(sl.WithCommands):
         else:
             readline.set_history_length(1000)
 
+    def __make_socket(self):
+        self.__del_socket()
+        self.__socket = self.__ctx.socket(zmq.REQ)
+        self.__socket.setsockopt(zmq.SNDTIMEO, TIMEOUT)
+        self.__socket.setsockopt(zmq.RCVTIMEO, TIMEOUT)
+        print(f"Connecting ``{self.cfg.prefix}(client)'' to {self.cfg.url} ...")
+        self.__socket.connect(self.cfg.url)
+
+    def __make_context(self):
+        self.__ctx = zmq.asyncio.Context()
+
+    def __process_result(self, b):
+        ret = pickle.loads(b)
+        if isinstance(ret, Exception):
+            raise ServerError(f"Error from server: ``{a107.str_exc(ret)}''")
+        return ret
+
+    def __close(self):
+        if self.__socket is not None:
+            self.__del_socket()
+            self.__ctx.destroy()
+
+    def __del_socket(self):
+        if self.__socket is not None:
+            try:
+                self.__socket.setsockopt(zmq.LINGER, 0)
+                self.__socket.close()
+            except zmq.ZMQError as e:
+                raise
+            self.__socket = None
+
+    def __clienthelp(self, what, *args, **kwargs):
+            if not what:
+                name_method = [(k, v.method) for k, v in self.commands_by_name.items() if not k.startswith("_")]
+                name_descr = [("?", "print this (client-side help)"),
+                              ("help", "server-side help"),
+                              ("exit", "exit client"),]
+                name_descr.extend([(name, a107.get_obj_doc0(method)) for name, method in name_method])
+                headline = "Client-side commands"
+                lines = [headline, "="*len(headline), ""]+sl.format_name_method(name_method)
+                return "\n".join(lines)
+            else:
+                if what not in self.commands_by_name:
+                    raise ValueError("Invalid method: '{}'. Use '?' to list client-side methods.".format(what))
+                return sl.format_method(self.commands_by_name[what].method)
+
     def __print_result(self, ret):
         yoda("Happy I am.", True)
         flag_defaultprint = True
@@ -228,82 +266,6 @@ class Client(sl.WithCommands):
             flag_defaultprint = True
         if flag_defaultprint:
             sl.myprint(ret)
-
-    def __make_socket(self):
-        self.__del_socket()
-        self.__socket = self.__ctx.socket(zmq.REQ)
-        self.__socket.setsockopt(zmq.SNDTIMEO, TIMEOUT)
-        self.__socket.setsockopt(zmq.RCVTIMEO, TIMEOUT)
-        print(f"Connecting ``{self.cfg.prefix}(client)'' to {self.cfg.url} ...")
-        self.__socket.connect(self.cfg.url)
-
-    def __make_context(self):
-        self.__ctx = zmq.asyncio.Context()
-
-    async def __process_as_clientcommand(self, st):
-        """In the client, statement is processed as CSV
-
-        Args:
-            st: (string)
-
-        Returns:
-            ret: whatever the client command returns, or raises NotAClientCommand
-        """
-        sdata, index = "", None
-        try: index = st.index(" ")
-        except ValueError: commandname = st
-        else: commandname = st[:index]
-        if not commandname in self.commands_by_name:
-            raise NotAClientCommand()
-        if index is not None: sdata = st[index+1:]
-        args = _str2args(sdata)
-        method = self.commands_by_name[commandname].method
-        ret = await method(*args[0], **args[1])
-        return ret
-
-    def __clienthelp(self, what):
-            if not what:
-                name_method = [(k, v.method) for k, v in self.commands_by_name.items() if not k.startswith("_")]
-                name_descr = [("?", "print this (client-side help)"),
-                              ("help", "server-side help"),
-                              ("exit", "exit client"),]
-                name_descr.extend([(name, a107.get_obj_doc0(method)) for name, method in name_method])
-                headline = "Client-side commands"
-                lines = [headline, "="*len(headline), ""]+sl.format_name_method(name_method)
-                return "\n".join(lines)
-            else:
-                if what not in self.commands_by_name:
-                    raise ValueError("Invalid method: '{}'. Use '?' to list client-side methods.".format(what))
-                return sl.format_method(self.commands_by_name[what].method)
-
-    def __process_result(self, b):
-        ret = pickle.loads(b)
-        if isinstance(ret, Exception):
-            raise ServerError(f"Error from server: ``{a107.str_exc(ret)}''")
-        return ret
-
-    def __close(self):
-        # print(f"{self.__class__.__name__} CLOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
-        if self.__socket is not None:
-            self.__del_socket()
-            self.__ctx.destroy()
-
-    def __del_socket(self):
-        if self.__socket is not None:
-            try:
-                self.__socket.setsockopt(zmq.LINGER, 0)
-                self.__socket.close()
-            except zmq.ZMQError as e:
-                raise
-            self.__socket = None
-
-
-
-
-
-
-
-
 
 
 def yoda(s, happy=True):

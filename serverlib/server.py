@@ -274,7 +274,7 @@ class Server(sl.WithCommands):
             data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
             if not isinstance(data, list):
                 exception = CommandError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
-            elif len(data) != 2 or type(data[0]) != list or type(data[1]) != dict:
+            elif len(data) != 2 or type(data[0]) not in (list, tuple) or type(data[1]) != dict:
                 exception = CommandError("Data must unpickle to a structure like this: [[...], {...}]")
         return commandname, has_data, data, command, exception
 

@@ -4,8 +4,8 @@ from colored import fg, attr, bg
 
 
 __all__ = ["hopo2url", "myprint", "get_methods", "get_commandnames", "format_name_method", "format_description",
-           "format_method", "cfg2str", "cfg2dict", "WithCommands", "Commands", "ClientCommands", "Command", "ServerCommands",
-           ]
+           "format_method", "cfg2str", "cfg2dict", "WithCommands", "Commands", "ClientCommands", "Command", 
+           "ServerCommands", "parse_statement",]
 
 
 class Command:
@@ -194,3 +194,17 @@ def cfg2dict(cfg, flag_clean=True):
             ret[attrname] = attr
 
     return ret
+
+
+def parse_statement(statement, *args_, **kwargs_):
+    """Parses statement and returns (commandname, args, kwargs)"""
+    try:
+        index = statement.index(" ")
+    except ValueError:
+        commandname, args, kwargs = statement, [], {}
+    else:
+        commandname = statement[:index]
+        args, kwargs = a107.str2args(statement[index+1:])
+    if args_: args.extend(args_)
+    if kwargs_: kwargs.update(kwargs_)
+    return commandname, args, kwargs

@@ -22,10 +22,9 @@ class FortuneCommands(serverlib.ServerCommands):
 
     randint.__doc__ = ra.randint.__doc__
 
-    async def choice(self, bargs):
+    async def choice(self, *args):
         """Returns one of the arguments passed randomly chosen."""
-
-        return ra.choice(self.to_list(bargs))
+        return ra.choice(args)
 
 
 def main(args):
