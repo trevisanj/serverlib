@@ -205,7 +205,7 @@ class Client(sl.WithCommands):
     def __process_result(self, b):
         ret = pickle.loads(b)
         if isinstance(ret, Exception):
-            raise ServerError(f"Error from server: ``{a107.str_exc(ret)}''")
+            raise ServerError(f"Error from server: {a107.fancilyquoted(a107.str_exc(ret))}")
         return ret
 
     def __close(self):

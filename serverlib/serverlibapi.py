@@ -120,7 +120,7 @@ def get_commandnames(obj):
 
 def get_methods(obj, flag_protected=False):
     """Return [(name, method), ...] for the "commands" in obj."""
-    return [x for x in inspect.getmembers(obj, predicate=inspect.ismethod) if not x[0].startswith("__") and (flag_protected or not x[0].startswith("_"))]
+    return [x for x in inspect.getmembers(obj, predicate=inspect.ismethod) if "__" not in x[0] and (flag_protected or not x[0].startswith("_"))]
 
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):

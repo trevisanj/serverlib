@@ -89,10 +89,6 @@ class Server(sl.WithCommands):
         self.ctx = None  # zmq context
         self.sck_rep = None  # ZMQ_REP socket
 
-        # Commands
-        self.cmdcmd = []  # list of ServerCommands objects
-        self.cmd_by_name = {}  # {cmd.name: cmd, ...}
-        self.commands_by_name = {}  # {commandname: Command, ...}, synthesized from all self.cmdcmd
         self.attach_cmd(_EssentialServerCommands())
         if flag_basiccommands:
             self.attach_cmd(BasicServerCommands())
