@@ -1,7 +1,7 @@
 import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, shlex, os, csv
 from colored import fg, attr
 
-__all__ = ["Client", "ServerError"]
+__all__ = ["Client", "ServerError", "Again"]
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
@@ -62,16 +62,18 @@ class Client(sl.WithCommands):
 
     async def execute(self, statement, *args, **kwargs):
         """Executes statemen; tries special, then client-side, then server-side."""
-        ret, statementdata = None, sl.parse_statement(statement, *args, **kwargs)
-        if not await self.__execute_client_special(statementdata):
+        statementdata = sl.parse_statement(statement, *args, **kwargs)
+        ret, flag = await self.__execute_client_special(statementdata)
+        if not flag:
             try: ret = await self.__execute_client(statementdata)
             except NotAClientCommand: ret = await self.__execute_server(statementdata)
         return ret
 
     async def execute_client(self, statement, *args, **kwargs):
         """Executes statement; tries special, then client-side."""
-        ret, statementdata = None, sl.parse_statement(statement, *args, **kwargs)
-        if not await self.__execute_client_special(statementdata):
+        statementdata = sl.parse_statement(statement, *args, **kwargs)
+        ret, flag = await self.__execute_client_special(statementdata)
+        if not flag:
             ret = await self.__execute_client(statementdata)
         return ret
 
@@ -93,11 +95,11 @@ class Client(sl.WithCommands):
         try:
             await self.socket.send(bst)
             b = await self.socket.recv()
-        except zmq.Again:
+        except zmq.Again as e:
             # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
             self.__del_socket()
-            raise
+            raise Again(a107.str_exc(e))
         ret = self.__process_result(b)
         return ret
 
@@ -139,10 +141,10 @@ class Client(sl.WithCommands):
 
     async def __execute_client_special(self, statementdata):
         commandname, args, kwargs = statementdata
-        ret = False
+        ret, flag = None, False
         if commandname == "?":
-            ret = self.__clienthelp(*args, **kwargs)
-        return ret
+            flag, ret = True, self.__clienthelp(*args, **kwargs)
+        return ret, flag
 
     async def __execute_in_loop(self, st):
         """Executes and prints result."""
@@ -222,9 +224,9 @@ class Client(sl.WithCommands):
                 raise
             self.__socket = None
 
-    def __clienthelp(self, what, *args, **kwargs):
+    def __clienthelp(self, what=None, *args, **kwargs):
             if not what:
-                name_method = [(k, v.method) for k, v in self.commands_by_name.items() if not k.startswith("_")]
+                name_method = [(k, v.method) for k, v in self.commands_by_name.items() if not "__" in k]
                 name_descr = [("?", "print this (client-side help)"),
                               ("help", "server-side help"),
                               ("exit", "exit client"),]
@@ -284,3 +286,8 @@ class NotAClientCommand(Exception):
 
 
 class ServerError(Exception): pass
+
+
+class Again(Exception):
+    """Attempt to unify my network error reporting to users of this library (inspired in zmq.Again)."""
+    pass

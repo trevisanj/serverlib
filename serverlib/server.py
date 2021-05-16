@@ -1,6 +1,7 @@
 """Server, ServerCommands etc."""
-import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, copy, serverlib as sl
+import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, copy, serverlib as sl, traceback
 from dataclasses import dataclass
+from colored import fg, bg, attr
 __all__ = ["Server", "CommandError", "BasicServerCommands", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
 
@@ -64,6 +65,16 @@ class BasicServerCommands(sl.ServerCommands):
         seconds = float(seconds)
         asyncio.create_task(self.master.sleep(float(seconds), name))
 
+    async def loops(self):
+        ret = []
+        for name, loopinfo in self.master.lo_ops.items():
+            t = loopinfo.task
+            ret.append({"name": name,
+                        "status": "pending" if not t.done() else "cancelled" if t.cancelled() else "finished",
+                        "errormessage": loopinfo.errormessage,
+                        })
+        return ret
+
 
 # Server states
 ST_INIT = 0     # still in __init__()
@@ -92,6 +103,10 @@ class Server(sl.WithCommands):
     def sleepers(self):
         return self.__sleepers
 
+    @property
+    def lo_ops(self):
+        return self.__lo_ops
+
     def __init__(self, cfg, cmd=None, flag_basiccommands=True):
         super().__init__()
         self.__state = ST_INIT
@@ -103,7 +118,7 @@ class Server(sl.WithCommands):
         self.__flag_to_stop = False # stop at next chance
         self.__recttask = None
         self.__sleepers = {}  # {name: _Sleeper, ...}
-        self.__runtasks = None
+        self.__lo_ops = None
         self.ctx = None  # zmq context
         self.sck_rep = None  # ZMQ_REP socket
 
@@ -167,9 +182,6 @@ class Server(sl.WithCommands):
         def _ctrl_z_handler(signum, frame):
             """... we need this to handle the Ctrl+Z."""
             self.__stop()
-        async def catch_cancelled(awaitable):
-            try: return await awaitable
-            except asyncio.CancelledError as e: return e
         signal.signal(signal.SIGTSTP, _ctrl_z_handler)
         signal.signal(signal.SIGTERM, _ctrl_z_handler)
         self.cfg.read_configfile()
@@ -177,20 +189,35 @@ class Server(sl.WithCommands):
         # Automatically figures out all methods containing the word "loop" in them
         attrnames = [attrname for attrname in dir(self) if "loop" in attrname]
         self.logger.debug(f"About to await on {attrnames}")
-        # Doesn't raise anything from here: I want to see exactly how each loop ends and what it raises without affecting
-        # the other loops.
-        #
-        # asyncio.gather() raises CancelledError even with return_exceptions=True, hence catch_cancelled()
-        self.__runtasks = [asyncio.create_task(catch_cancelled(getattr(self, attrname)())) for attrname in attrnames]
-        results = await asyncio.gather(*self.__runtasks, return_exceptions=True)
+
+        async def loopcoro(attrname):
+            # - Waits until main loop is ready (if secondary loop)
+            # - Catches cancellation: I am sort of figuring out concurrency still, and want to see exactly how each loop
+            #   ends, and what are the best practices
+            awaitable = getattr(self, attrname)()
+            try:
+                if not attrname.endswith("__serverloop"):  # secondary loop waits until primary loop is ready
+                    while self.state != sl.ST_LOOP: await asyncio.sleep(0.01)
+                return await awaitable
+            except BaseException as e:
+                self.__lo_ops[attrname].errormessage = a107.str_exc(e)
+                if isinstance(e, asyncio.CancelledError): return e
+                # BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE
+                # Here is the unified place to decide what to do with high-bug-probability errors
+                print(f"🐛🐛🐛 {attr('bold')}Crash in {self.__class__.__name__}.{attrname}(){attr('reset')} 🐛🐛🐛")
+                traceback.print_exc()
+                raise
+
+        self.__lo_ops = {attrname: _LoopInfo(asyncio.create_task(loopcoro(attrname), name=attrname)) for attrname in attrnames}
+        results = await asyncio.gather(*[x.task for x in self.__lo_ops.values()], return_exceptions=True)
         self.logger.info(f"*** Server {self.cfg.prefix} -- how the story ended: ***")
         for name, result in zip(attrnames, results):
             if isinstance(result, BaseException): result = a107.str_exc(result)
             self.logger.info(f"{name}(): {result}")
 
     async def stop(self):
-        if self.__runtasks is not None:
-            for runtask in self.__runtasks: runtask.cancel()
+        if self.__lo_ops is not None:
+            for x in self.__lo_ops.values(): x.task.cancel()
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
     # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
@@ -213,16 +240,15 @@ class Server(sl.WithCommands):
                             await asyncio.sleep(self.cfg.sleepinterval)
                     else:
                         pass
-                except KeyboardInterrupt:
-                    self.__stop()
+                except KeyboardInterrupt: self.__stop()
         except asyncio.CancelledError: raise
         except:
             self.cfg.logger.exception(f"Server '{self.cfg.prefix}' crashed!")
             raise
         finally:
+            self.__state = ST_STOPPED
             self.cfg.logger.debug(f"{self.__class__.__name__}.__serverloop() finalliessssssssssssssssssssssssss")
             await self.wake_up()
-            self.__state = ST_STOPPED
             self.sck_rep.close()
             self.ctx.destroy()
             await self._on_destroy()
@@ -325,3 +351,8 @@ class _Sleeper:
         self.name = a107.random_name() if name is None else name
         self.task = None
         self.wake_up = False
+        
+@dataclass
+class _LoopInfo:
+    task: asyncio.Task = None
+    errormessage: str = ""
