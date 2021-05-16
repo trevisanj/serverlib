@@ -1,7 +1,7 @@
 """Server, ServerCommands etc."""
 import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, copy, serverlib as sl
-__all__ = ["Server", "CommandError", "BasicServerCommands",
-           "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
+from dataclasses import dataclass
+__all__ = ["Server", "CommandError", "BasicServerCommands", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
 
 class _EssentialServerCommands(sl.ServerCommands):
@@ -50,6 +50,20 @@ class BasicServerCommands(sl.ServerCommands):
         """Returns "pong"."""
         return "pong"
 
+    async def wake_up(self):
+        """Gently wakes up all sleepers."""
+        await self.master.wake_up()
+
+    async def sleepers(self):
+        ret = [{"name": sleeper.name, "seconds": sleeper.seconds} for sleeper in self.master.sleepers.values()]
+        return ret
+
+    # This sleepers thing started as a humorous exercise to understand task cancellation and ended up somewhat serious
+    async def create_sleeper(self, seconds, name=None):
+        """Creates sleeper that sleepes seconds."""
+        seconds = float(seconds)
+        asyncio.create_task(self.master.sleep(float(seconds), name))
+
 
 # Server states
 ST_INIT = 0     # still in __init__()
@@ -74,6 +88,10 @@ class Server(sl.WithCommands):
     def state(self):
         return self.__state
 
+    @property
+    def sleepers(self):
+        return self.__sleepers
+
     def __init__(self, cfg, cmd=None, flag_basiccommands=True):
         super().__init__()
         self.__state = ST_INIT
@@ -84,8 +102,8 @@ class Server(sl.WithCommands):
         self.__logger = None
         self.__flag_to_stop = False # stop at next chance
         self.__recttask = None
-        self.__sleeptasks = []
-        self.__runtask = None
+        self.__sleepers = {}  # {name: _Sleeper, ...}
+        self.__runtasks = None
         self.ctx = None  # zmq context
         self.sck_rep = None  # ZMQ_REP socket
 
@@ -124,27 +142,34 @@ class Server(sl.WithCommands):
         return ret
 
     async def wake_up(self):
-        """Cancel all "sleepings"."""
-        for sleeptask in copy.copy(self.__sleeptasks): sleeptask.cancel()
-        self.__sleeptasks = []
+        """Cancel all "naps" created with self.sleep()."""
+        for sleeper in self.__sleepers.values(): sleeper.wake_up = True
 
     async def wait_a_bit(self):
         """Unified way to wait for a bit, usually before retrying something that goes wront."""
         await self.sleep(0.1)
 
-    async def sleep(self, to_wait):
-        sleeptask = asyncio.create_task(asyncio.sleep(to_wait))
-        self.__sleeptasks.append(sleeptask)
-        try: await sleeptask
-        except asyncio.CancelledError: pass
+    async def sleep(self, to_wait, name=None):
+        """Takes a nap that can be prematurely terminated with self.wake_up()."""
+        interval = min(to_wait, 0.1)
+        sleeper = _Sleeper(to_wait, name)
+        self.__sleepers[sleeper.name] = sleeper
+        slept = 0
+        try:
+            while slept < to_wait and not sleeper.wake_up:
+                await asyncio.sleep(interval)
+                slept += interval
         finally:
-            try: self.__sleeptasks.remove(sleeptask)
-            except ValueError: pass
+            try: del self.__sleepers[sleeper.name]
+            except KeyError: pass
 
     async def run(self):
         def _ctrl_z_handler(signum, frame):
             """... we need this to handle the Ctrl+Z."""
             self.__stop()
+        async def catch_cancelled(awaitable):
+            try: return await awaitable
+            except asyncio.CancelledError as e: return e
         signal.signal(signal.SIGTSTP, _ctrl_z_handler)
         signal.signal(signal.SIGTERM, _ctrl_z_handler)
         self.cfg.read_configfile()
@@ -152,20 +177,20 @@ class Server(sl.WithCommands):
         # Automatically figures out all methods containing the word "loop" in them
         attrnames = [attrname for attrname in dir(self) if "loop" in attrname]
         self.logger.debug(f"About to await on {attrnames}")
-        gathered = [getattr(self, attrname)() for attrname in attrnames]
-
-        self.__runtask = asyncio.create_task(self.__run_aux(*gathered))
-        try:
-            await self.__runtask
-        except asyncio.CancelledError:
-            pass
-
-    async def __run_aux(self, *args):
-        await asyncio.gather(*args)
+        # Doesn't raise anything from here: I want to see exactly how each loop ends and what it raises without affecting
+        # the other loops.
+        #
+        # asyncio.gather() raises CancelledError even with return_exceptions=True, hence catch_cancelled()
+        self.__runtasks = [asyncio.create_task(catch_cancelled(getattr(self, attrname)())) for attrname in attrnames]
+        results = await asyncio.gather(*self.__runtasks, return_exceptions=True)
+        self.logger.info(f"*** Server {self.cfg.prefix} -- how the story ended: ***")
+        for name, result in zip(attrnames, results):
+            if isinstance(result, BaseException): result = a107.str_exc(result)
+            self.logger.info(f"{name}(): {result}")
 
     async def stop(self):
-        if self.__runtask is not None:
-            self.__runtask.cancel()
+        if self.__runtasks is not None:
+            for runtask in self.__runtasks: runtask.cancel()
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
     # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
@@ -188,11 +213,9 @@ class Server(sl.WithCommands):
                             await asyncio.sleep(self.cfg.sleepinterval)
                     else:
                         pass
-                        # print("I ACTUALLY DID SUM SHIT")
                 except KeyboardInterrupt:
                     self.__stop()
-        except asyncio.CancelledError:
-            pass
+        except asyncio.CancelledError: raise
         except:
             self.cfg.logger.exception(f"Server '{self.cfg.prefix}' crashed!")
             raise
@@ -294,3 +317,11 @@ class Server(sl.WithCommands):
 
 class CommandError(Exception):
     pass
+
+
+class _Sleeper:
+    def __init__(self, seconds, name=None):
+        self.seconds = seconds
+        self.name = a107.random_name() if name is None else name
+        self.task = None
+        self.wake_up = False
