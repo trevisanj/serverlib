@@ -1,7 +1,7 @@
 import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, shlex, os, csv
 from colored import fg, attr
 
-__all__ = ["Client", "ServerError", "Again"]
+__all__ = ["Client", "ServerError", "TryAgain"]
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
@@ -99,7 +99,7 @@ class Client(sl.WithCommands):
             # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
             self.__del_socket()
-            raise Again(a107.str_exc(e))
+            raise TryAgain(a107.str_exc(e))
         ret = self.__process_result(b)
         return ret
 
@@ -288,6 +288,6 @@ class NotAClientCommand(Exception):
 class ServerError(Exception): pass
 
 
-class Again(Exception):
+class TryAgain(Exception):
     """Attempt to unify my network error reporting to users of this library (inspired in zmq.Again)."""
     pass
