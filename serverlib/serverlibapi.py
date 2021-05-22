@@ -1,9 +1,10 @@
 """This is the serverlib internal API."""
-import re, textwrap, a107, inspect
+import re, textwrap, a107, inspect, asyncio
 from colored import fg, attr, bg
+from .intelligence import *
 
 
-__all__ = ["hopo2url", "myprint", "get_methods", "get_commandnames", "format_name_method", "format_description",
+__all__ = ["hopo2url", "get_methods", "get_commandnames", "format_name_method", "format_description",
            "format_method", "cfg2str", "cfg2dict", "WithCommands", "Commands", "ClientCommands", "Command", 
            "ServerCommands", "parse_statement",]
 
@@ -20,16 +21,8 @@ class Command:
         self.flag_bargs = flag_bargs
 
 
-class Commands(object):
+class Commands(Intelligence):
     _name = None
-
-    @property
-    def cfg(self):
-        return self.master.cfg
-
-    @property
-    def logger(self):
-        return self.master.cfg.logger
 
     @staticmethod
     def to_list(args):
@@ -42,7 +35,7 @@ class Commands(object):
         return self.__class__.__name__
 
     def __init__(self):
-        self.master = None
+        super().__init__(None)
 
 
 class ClientCommands(Commands):
@@ -77,7 +70,10 @@ class WithCommands:
         # {commandname: Command, ...}, synthesized from all self.cmdcmd
         self.commands_by_name = {}
 
-    def attach_cmd(self, cmdcmd):
+    async def _initialize_cmd(self):
+        await asyncio.gather(*[cmd.initialize() for cmd in self.cmdcmd])
+
+    def _attach_cmd(self, cmdcmd):
         """Attaches one or more ServerCommands instances.
 
         This method is not async because it was designed to be called from __init__().
@@ -120,7 +116,9 @@ def get_commandnames(obj):
 
 def get_methods(obj, flag_protected=False):
     """Return [(name, method), ...] for the "commands" in obj."""
-    return [x for x in inspect.getmembers(obj, predicate=inspect.ismethod) if "__" not in x[0] and (flag_protected or not x[0].startswith("_"))]
+    return [x for x in inspect.getmembers(obj, predicate=inspect.ismethod)
+            if "__" not in x[0] and (flag_protected or not x[0].startswith("_"))
+               and x[0] not in ("initialize", "close",)]
 
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):
@@ -139,21 +137,6 @@ def hopo2url(hopo, fallbackhost="127.0.0.1"):
         host = fallbackhost
     h = f"tcp://{host}" if "/" not in host else host
     return h if port is None else f"{h}:{port}"
-
-
-def myprint(x):
-    """
-    Used to print results from client statements supposedly in a comprehensive manner.
-
-    Note: I tried this in many ways; simply using textwrap seems to be way better than
-    a107.make_code_readable(), pprint, pprintpp or autopep8.
-    """
-
-    if not isinstance(x, str):
-        x = repr(x)
-    x = x.replace("\n", "")
-    x = re.sub(r'\s+', ' ', x)
-    print("\n".join(textwrap.wrap(x, 80)))
 
 
 def cfg2str(cfg, flag_clean=True):

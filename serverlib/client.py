@@ -1,4 +1,4 @@
-import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, shlex, os, csv
+import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, os, textwrap, re
 from colored import fg, attr
 
 __all__ = ["Client", "ServerError", "TryAgain"]
@@ -12,6 +12,14 @@ COLOR_ERROR = fg("light_red")
 COLOR_HAPPY = fg("light_green")
 COLOR_SAD = fg("blue")
 COLOR_INPUT = fg("orange_1")
+COLOR_HEADER = fg("white")
+
+# Client states
+CST_INIT = 0     # still in __init__()
+CST_ALIVE = 10    # passed __init__()
+CST_INITEDCMD = 20  # inited commands
+CST_LOOP = 30       # looping in command-line interface
+CST_STOPPED = 40    # stopped
 
 
 class Client(sl.WithCommands):
@@ -34,19 +42,13 @@ class Client(sl.WithCommands):
         return self.__socket
 
     def __init__(self, cfg, cmd=None):
-        self.__inited = False
         super().__init__()
-        self.__state = sl.ST_INIT
+        self.__state = CST_INIT
         self.cfg = cfg
         self.flag_needs_to_reset_colors = False
-        if cmd is not None: self.attach_cmd(cmd)
-        self.__state = sl.ST_ALIVE
+        if cmd is not None: self._attach_cmd(cmd)
         self.__ctx, self.__socket = None, None
-        self.__inited = True
-
-    def __del__(self):
-        """It is essential to close the zmq stuff, otherwise the async loop event hangs forever."""
-        if self.__inited: self.__close()
+        self.__state = CST_ALIVE
 
     def __enter__(self):
         return self
@@ -55,6 +57,7 @@ class Client(sl.WithCommands):
         self.__close()
 
     async def connect(self):
+        await self.__assure_initialized_cmd()
         _ = self.socket
 
     async def close(self):
@@ -62,6 +65,7 @@ class Client(sl.WithCommands):
 
     async def execute(self, statement, *args, **kwargs):
         """Executes statemen; tries special, then client-side, then server-side."""
+        await self.__assure_initialized_cmd()
         statementdata = sl.parse_statement(statement, *args, **kwargs)
         ret, flag = await self.__execute_client_special(statementdata)
         if not flag:
@@ -71,6 +75,7 @@ class Client(sl.WithCommands):
 
     async def execute_client(self, statement, *args, **kwargs):
         """Executes statement; tries special, then client-side."""
+        await self.__assure_initialized_cmd()
         statementdata = sl.parse_statement(statement, *args, **kwargs)
         ret, flag = await self.__execute_client_special(statementdata)
         if not flag:
@@ -80,6 +85,7 @@ class Client(sl.WithCommands):
     async def execute_server(self, statement, *args, **kwargs):
         """Executes statement directly on the server."""
         assert isinstance(statement, str)
+        await self.__assure_initialized_cmd()
         statementdata = sl.parse_statement(statement, *args, **kwargs)
         return await self.__execute_server(statementdata)
     
@@ -92,6 +98,7 @@ class Client(sl.WithCommands):
         Returns:
             ret: either result or exception raised on the server (does not raise)
         """
+        await self.__assure_initialized_cmd()
         try:
             await self.socket.send(bst)
             b = await self.socket.recv()
@@ -105,11 +112,12 @@ class Client(sl.WithCommands):
 
     async def run(self):
         """Will run client and automatically exit the program. Intercepts Ctrl+C and Ctrl+Z."""
+        await self.__assure_initialized_cmd()
         self.__intercept_exit()
         self.__set_historylength()
         print(await self.execute_server("_get_welcome"))  # Retrieves and prints welcome message from server
         srvprefix = await self.execute_server("_get_prefix") # Gets server name in order to compose local prompt
-        self.__state = sl.ST_LOOP
+        self.__state = CST_LOOP
         try:
             while True:
                 self.flag_needs_to_reset_colors = True
@@ -123,9 +131,14 @@ class Client(sl.WithCommands):
         except KeyboardInterrupt:
             pass
         finally:
-            self.__state = sl.ST_STOPPED
+            self.__state = CST_STOPPED
 
     # PRIVATE
+    
+    async def __assure_initialized_cmd(self):
+        if self.__state < CST_INITEDCMD: 
+            await self._initialize_cmd()
+            self.__state = CST_INITEDCMD
 
     async def __execute_server(self, statementdata):
         commandname, args, kwargs = statementdata
@@ -241,34 +254,7 @@ class Client(sl.WithCommands):
 
     def __print_result(self, ret):
         yoda("Happy I am.", True)
-        flag_defaultprint = True
-        if isinstance(ret, str):
-            print(ret)
-            flag_defaultprint = False
-        elif isinstance(ret, tuple) and len(ret) == 2 and isinstance(ret[0], list) and isinstance(ret[1], list):
-            # Tries to detect "tabulate-like" (rows, headers) arguments
-            print(tabulate.tabulate(*ret))
-            flag_defaultprint = False
-        elif isinstance(ret, list):
-            if len(ret) > 0:
-                if isinstance(ret[0], dict):
-                    a107.print_girafales(tabulate.tabulate([list(row.values()) for row in ret], list(ret[0].keys())))
-                    flag_defaultprint = False
-                else:
-                    print("\n".join([str(x) for x in ret]))  # Experimental: join list elements with "\n"
-                    flag_defaultprint = False
-        elif isinstance(ret, dict):
-            if len(ret) > 0:
-                first = next(iter(ret.values()))
-                if isinstance(first, dict):  # dict of dicts: converts key to column
-                    rows = [[k, *v.values()] for k, v in ret.items()]; header = ["key", *first.keys()]
-                    a107.print_girafales(tabulate.tabulate(rows, header))
-                    flag_defaultprint = False
-        else:
-            flag_defaultprint = True
-        if flag_defaultprint:
-            sl.myprint(ret)
-
+        _print_result(ret)
 
 def yoda(s, happy=True):
     print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")
@@ -291,3 +277,71 @@ class ServerError(Exception): pass
 class TryAgain(Exception):
     """Attempt to unify my network error reporting to users of this library (inspired in zmq.Again)."""
     pass
+
+
+def _powertabulate(rows, header, *args, **kwargs):
+    is_whenthis = [h == "whenthis" for h in header]
+    if any(is_whenthis):
+        for row in rows:
+            for i, is_ in enumerate(is_whenthis):
+                if is_: row[i] = a107.dt2str(a107.to_datetime(row[i]))
+    return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
+
+
+def _detect_girafales(s):
+    lines = s.split("\n")
+    return any(line.startswith("-") and line.count("-") > len(line)/2 for line in lines)
+
+
+def _print_result(ret):
+    def print_header(k, level):
+        print(attr('bold')+COLOR_HEADER+"\n".join(a107.format_h(level+1, k))+attr("reset"))
+
+    def handle_list(arg):
+        if len(arg) > 0:
+            if isinstance(arg[0], dict):
+                excluded = ("info",)
+                header = [k for k in arg[0].keys() if k not in excluded]
+                rows = [[v for k, v in row.items() if k not in excluded] for row in arg]
+                a107.print_girafales(_powertabulate(rows, header))
+            else: print("\n".join([str(x) for x in arg]))  # Experimental: join list elements with "\n"
+        else: handle_default(arg)
+
+    def handle_dict(arg, level=0):
+        if len(arg) > 0:
+            first = next(iter(arg.values()))
+            if isinstance(first, dict):
+                # dict of dicts: converts key to column
+                rows = [[k, *v.values()] for k, v in arg.items()]; header = ["key", *first.keys()]
+                a107.print_girafales(_powertabulate(rows, header))
+            elif isinstance(first, (tuple, list)):
+                # dict of lists: prints keys as titles and processes lists
+                for i, (k, v) in enumerate(arg.items()):
+                    if i > 0: print()
+                    print_header(k, level)
+                    handle_list(v)
+            elif isinstance(first, str) and "\n" in first:
+                # dict of strings with more than one line: prints keys as titles and prints strings
+                for i, (k, v) in enumerate(arg.items()):
+                    if i > 0: print()
+                    print_header(k, level)
+                    print(v)
+            else: handle_default(arg)
+        else: handle_default(arg)
+
+    def handle_default(arg):
+        if not isinstance(arg, str): arg = str(arg)
+        if "\n" in arg:
+            if _detect_girafales(arg): a107.print_girafales(arg)
+            else: print(arg)
+        else:
+            arg = re.sub(r'\s+', ' ', arg)
+            print("\n".join(textwrap.wrap(arg, 80)))
+
+    if isinstance(ret, str): print(ret)
+    elif isinstance(ret, tuple) and len(ret) == 2 and isinstance(ret[0], list) and isinstance(ret[1], list):
+        # Tries to detect "tabulate-like" (rows, headers) arguments
+        a107.print_girafales(_powertabulate((tabulate.tabulate(*ret))))
+    elif isinstance(ret, list): handle_list(ret)
+    elif isinstance(ret, dict): handle_dict(ret)
+    else: handle_default(ret)

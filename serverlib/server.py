@@ -1,6 +1,5 @@
 """Server, ServerCommands etc."""
 import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, copy, serverlib as sl, traceback
-from dataclasses import dataclass
 from colored import fg, bg, attr
 __all__ = ["Server", "CommandError", "BasicServerCommands", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
@@ -67,20 +66,20 @@ class BasicServerCommands(sl.ServerCommands):
 
     async def loops(self):
         ret = []
-        for name, loopinfo in self.master.lo_ops.items():
-            t = loopinfo.task
+        for name, task in self.master.lo_ops.items():
             ret.append({"name": name,
-                        "status": "pending" if not t.done() else "cancelled" if t.cancelled() else "finished",
-                        "errormessage": loopinfo.errormessage,
+                        "status": "pending" if not task.done() else "cancelled" if task.cancelled() else "finished",
+                        "marked": task.marked,
+                        "errormessage": task.errormessage,
                         })
         return ret
 
 
 # Server states
 ST_INIT = 0     # still in __init__()
-ST_ALIVE = 1    # passed __init__()
-ST_LOOP = 2     # in main loop
-ST_STOPPED = 3  # stopped
+ST_ALIVE = 10    # passed __init__()
+ST_LOOP = 30     # in main loop
+ST_STOPPED = 40  # stopped
 
 
 class Server(sl.WithCommands):
@@ -118,15 +117,15 @@ class Server(sl.WithCommands):
         self.__flag_to_stop = False # stop at next chance
         self.__recttask = None
         self.__sleepers = {}  # {name: _Sleeper, ...}
-        self.__lo_ops = None
+        self.__lo_ops = None  # {methodname:
         self.ctx = None  # zmq context
         self.sck_rep = None  # ZMQ_REP socket
 
-        self.attach_cmd(_EssentialServerCommands())
+        self._attach_cmd(_EssentialServerCommands())
         if flag_basiccommands:
-            self.attach_cmd(BasicServerCommands())
+            self._attach_cmd(BasicServerCommands())
         if cmd is not None:
-            self.attach_cmd(cmd)
+            self._attach_cmd(cmd)
 
         self.__state = ST_ALIVE
 
@@ -208,8 +207,14 @@ class Server(sl.WithCommands):
                 traceback.print_exc()
                 raise
 
-        self.__lo_ops = {attrname: _LoopInfo(asyncio.create_task(loopcoro(attrname), name=attrname)) for attrname in attrnames}
-        results = await asyncio.gather(*[x.task for x in self.__lo_ops.values()], return_exceptions=True)
+        def create_task(attrname):
+            task = asyncio.create_task(loopcoro(attrname), name=attrname)
+            task.errormessage = None
+            task.marked = False  # marked to die, like Guts
+            return task
+
+        self.__lo_ops = {attrname: create_task(attrname) for attrname in attrnames}
+        results = await asyncio.gather(*self.__lo_ops.values(), return_exceptions=True)
         self.logger.info(f"*** Server {self.cfg.prefix} -- how the story ended: ***")
         for name, result in zip(attrnames, results):
             if isinstance(result, BaseException): result = a107.str_exc(result)
@@ -217,7 +222,8 @@ class Server(sl.WithCommands):
 
     async def stop(self):
         if self.__lo_ops is not None:
-            for x in self.__lo_ops.values(): x.task.cancel()
+            for task in self.__lo_ops.values():
+                if not task.marked: task.cancel()
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
     # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
@@ -226,6 +232,7 @@ class Server(sl.WithCommands):
     async def __serverloop(self):
         a107.ensure_path(self.cfg.datadir)
         self.__bind_rep()
+        await self._initialize_cmd()
         await self._on_run()
         self.__state = ST_LOOP
         try:
@@ -249,6 +256,7 @@ class Server(sl.WithCommands):
             self.__state = ST_STOPPED
             self.cfg.logger.debug(f"{self.__class__.__name__}.__serverloop() finalliessssssssssssssssssssssssss")
             await self.wake_up()
+            await asyncio.sleep(0.1); await self.stop()  # Thought I might wait a bit before cancelling all loops
             self.sck_rep.close()
             self.ctx.destroy()
             await self._on_destroy()
@@ -351,8 +359,3 @@ class _Sleeper:
         self.name = a107.random_name() if name is None else name
         self.task = None
         self.wake_up = False
-        
-@dataclass
-class _LoopInfo:
-    task: asyncio.Task = None
-    errormessage: str = ""
