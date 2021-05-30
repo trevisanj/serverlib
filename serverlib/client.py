@@ -1,7 +1,7 @@
-import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, os, textwrap, re
+import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, os, textwrap, re, pl3
 from colored import fg, attr
 
-__all__ = ["Client", "ServerError", "TryAgain"]
+__all__ = ["Client", "ServerError", "TryAgain", "print_result"]
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
@@ -254,7 +254,7 @@ class Client(sl.WithCommands):
 
     def __print_result(self, ret):
         yoda("Happy I am.", True)
-        _print_result(ret)
+        print_result(ret)
 
 def yoda(s, happy=True):
     print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")
@@ -280,11 +280,14 @@ class TryAgain(Exception):
 
 
 def _powertabulate(rows, header, *args, **kwargs):
-    is_whenthis = [h == "whenthis" for h in header]
-    if any(is_whenthis):
+    is_whenthis = [h in ("whenthis", "ts", "timestamp", "ts0", "ts1") for h in header]
+    is_period = [h == "period" for h in header]
+    numcols = len(header)
+    if any(is_whenthis) or any(is_period):
         for row in rows:
-            for i, is_ in enumerate(is_whenthis):
-                if is_: row[i] = a107.dt2str(a107.to_datetime(row[i]))
+            for i in range(numcols):
+                if is_whenthis[i]: row[i] = a107.dt2str(a107.to_datetime(row[i]))
+                elif is_period[i]: row[i] = pl3.QP.to_str(row[i])
     return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
 
 
@@ -293,7 +296,7 @@ def _detect_girafales(s):
     return any(line.startswith("-") and line.count("-") > len(line)/2 for line in lines)
 
 
-def _print_result(ret):
+def print_result(ret):
     def print_header(k, level):
         print(attr('bold')+COLOR_HEADER+"\n".join(a107.format_h(level+1, k))+attr("reset"))
 

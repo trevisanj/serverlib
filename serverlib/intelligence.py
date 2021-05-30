@@ -4,6 +4,12 @@ __all__ = ["Intelligence"]
 
 class Intelligence:
     """Intelligence base class: master, server, logger, cfg, initialize() and close()."""
+    _name = None
+
+    @property
+    def name(self):
+        if self._name: return self._name
+        return self.__class__.__name__
 
     @property
     def logger(self):

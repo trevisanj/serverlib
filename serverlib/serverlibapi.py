@@ -22,41 +22,52 @@ class Command:
 
 
 class Commands(Intelligence):
-    _name = None
+    """Base class for ServerCommands and ClientCommands.
 
-    @staticmethod
-    def to_list(args):
-        """Converts bytes to list of strings."""
-        return [x for x in args.decode().split(" ") if len(x) > 0]
-
-    @property
-    def name(self):
-        if self._name: return self._name
-        return self.__class__.__name__
-
+    __init__() takes no arguments (self.master will be assigned later when command is attached to server).
+    """
     def __init__(self):
-        super().__init__(None)
+            super().__init__(None)
 
+class ServerCommands(Commands): pass
+class ClientCommands(Commands): pass
 
-class ClientCommands(Commands):
-    """
-    Client-side "commands" which translate to client.execute(...) (i.e., calls to the server)
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.master = None
-
-
-class ServerCommands(Commands):
-    """
-    Class that implements all server-side "commands".
-
-    Notes:
-        - Subclass this to implement new commands
-        - All arguments come as bytes
-        - Don't forget to make them all "async"
-    """
+# class Commands(Intelligence):
+#     _name = None
+#
+#     @staticmethod
+#     def to_list(args):
+#         """Converts bytes to list of strings."""
+#         return [x for x in args.decode().split(" ") if len(x) > 0]
+#
+#     @property
+#     def name(self):
+#         if self._name: return self._name
+#         return self.__class__.__name__
+#
+#     def __init__(self):
+#         super().__init__(None)
+#
+#
+# class ClientCommands(Commands):
+#     """
+#     Client-side "commands" which translate to client.execute(...) (i.e., calls to the server)
+#     """
+#
+#     def __init__(self):
+#         super().__init__()
+#         self.master = None
+#
+#
+# class ServerCommands(Commands):
+#     """
+#     Class that implements all server-side "commands".
+#
+#     Notes:
+#         - Subclass this to implement new commands
+#         - All arguments come as bytes
+#         - Don't forget to make them all "async"
+#     """
 
 
 class WithCommands:

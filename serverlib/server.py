@@ -1,78 +1,8 @@
 """Server, ServerCommands etc."""
-import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, copy, serverlib as sl, traceback
+import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, serverlib as sl, traceback
 from colored import fg, bg, attr
-__all__ = ["Server", "CommandError", "BasicServerCommands", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
-
-
-class _EssentialServerCommands(sl.ServerCommands):
-    async def _get_welcome(self):
-        return "\n".join(a107.format_slug(f"Welcome to the '{self.master.cfg.prefix}' server", random.randint(0, 2)))
-
-    async def _get_name(self):
-        """Returns the server application name."""
-        return self.cfg.applicationname
-
-    async def _get_prefix(self):
-        """Returns the server prefix."""
-        return self.cfg.prefix
-
-
-class BasicServerCommands(sl.ServerCommands):
-    async def help(self, what=None):
-        """Gets summary of available server commands or help on specific command."""
-        if what is None:
-            name_method = [(k, v.method) for k, v in self.master.commands_by_name.items()]
-            aname = self.master.cfg.prefix
-            lines = [aname, "="*len(aname)]
-            if self.master.cfg.description: lines.extend(sl.format_description(self.master.cfg.description))
-            lines.append("")
-            lines.extend(sl.format_name_method(name_method))
-            return "\n".join(lines)
-        else:
-            if what not in self.master.commands_by_name:
-                raise ValueError("Invalid method: '{}'. Use 'help()' to list methods.".format(what))
-            return sl.format_method(self.master.commands_by_name[what].method)
-
-    async def stop(self):
-        """Stops server. """
-        await self.master.stop()
-        return "As you wish."
-
-    async def get_configuration(self):
-        """Returns dict containing configuration information.
-
-        Returns:
-            {script_name0: filepath0, ...}
-        """
-        return await self.master.get_configuration()
-
-    async def ping(self):
-        """Returns "pong"."""
-        return "pong"
-
-    async def wake_up(self):
-        """Gently wakes up all sleepers."""
-        await self.master.wake_up()
-
-    async def sleepers(self):
-        ret = [{"name": sleeper.name, "seconds": sleeper.seconds} for sleeper in self.master.sleepers.values()]
-        return ret
-
-    # This sleepers thing started as a humorous exercise to understand task cancellation and ended up somewhat serious
-    async def create_sleeper(self, seconds, name=None):
-        """Creates sleeper that sleepes seconds."""
-        seconds = float(seconds)
-        asyncio.create_task(self.master.sleep(float(seconds), name))
-
-    async def loops(self):
-        ret = []
-        for name, task in self.master.lo_ops.items():
-            ret.append({"name": name,
-                        "status": "pending" if not task.done() else "cancelled" if task.cancelled() else "finished",
-                        "marked": task.marked,
-                        "errormessage": task.errormessage,
-                        })
-        return ret
+from .basicservercommands import *
+__all__ = ["Server", "CommandError", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
 
 # Server states
@@ -111,37 +41,20 @@ class Server(sl.WithCommands):
         self.__state = ST_INIT
         self.cfg = cfg
         cfg.master = self
-
-        # More init
-        self.__logger = None
-        self.__flag_to_stop = False # stop at next chance
-        self.__recttask = None
         self.__sleepers = {}  # {name: _Sleeper, ...}
         self.__lo_ops = None  # {methodname:
-        self.ctx = None  # zmq context
-        self.sck_rep = None  # ZMQ_REP socket
-
         self._attach_cmd(_EssentialServerCommands())
-        if flag_basiccommands:
-            self._attach_cmd(BasicServerCommands())
-        if cmd is not None:
-            self._attach_cmd(cmd)
-
+        if flag_basiccommands: self._attach_cmd(BasicServerCommands())
+        if cmd is not None: self._attach_cmd(cmd)
         self.__state = ST_ALIVE
 
     # ┌─┐┬  ┬┌─┐┬─┐┬─┐┬┌┬┐┌─┐  ┌┬┐┌─┐
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤
     # └─┘ └┘ └─┘┴└─┴└─┴─┴┘└─┘  ┴ ┴└─┘
 
-    async def _on_destroy(self):
-        pass
-
-    async def _on_run(self):
-        pass
-
-    # #generic
-    async def _after_cycle(self):
-        pass
+    async def _on_destroy(self): pass
+    async def _on_run(self): pass
+    async def _after_cycle(self): pass
 
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
     # │ │└─┐├┤   │││├┤
@@ -155,9 +68,12 @@ class Server(sl.WithCommands):
         ret = list(_ret.items()), ["key", "value"]
         return ret
 
-    async def wake_up(self):
+    async def wake_up(self, sleepername=None):
         """Cancel all "naps" created with self.sleep()."""
-        for sleeper in self.__sleepers.values(): sleeper.wake_up = True
+        if sleepername is not None:
+            self.__sleepers[sleepername].wake_up = True
+        else:
+            for sleeper in self.__sleepers.values(): sleeper.wake_up = True
 
     async def wait_a_bit(self):
         """Unified way to wait for a bit, usually before retrying something that goes wront."""
@@ -178,13 +94,6 @@ class Server(sl.WithCommands):
             except KeyError: pass
 
     async def run(self):
-        def _ctrl_z_handler(signum, frame):
-            """... we need this to handle the Ctrl+Z."""
-            self.__stop()
-        signal.signal(signal.SIGTSTP, _ctrl_z_handler)
-        signal.signal(signal.SIGTERM, _ctrl_z_handler)
-        self.cfg.read_configfile()
-        self.ctx = zmq.asyncio.Context()
         # Automatically figures out all methods containing the word "loop" in them
         attrnames = [attrname for attrname in dir(self) if "loop" in attrname]
         self.logger.debug(f"About to await on {attrnames}")
@@ -220,133 +129,103 @@ class Server(sl.WithCommands):
             if isinstance(result, BaseException): result = a107.str_exc(result)
             self.logger.info(f"{name}(): {result}")
 
-    async def stop(self):
+    def stop(self):
         if self.__lo_ops is not None:
             for task in self.__lo_ops.values():
-                if not task.marked: task.cancel()
+                if not task.marked:
+                    task.marked = True
+                    print(f"stop() cancelling {task}")
+                    task.cancel()
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
     # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
     # ┴─┘└─┘┴ ┴ └┘ └─┘  ┴ ┴└─┘  ┴ ┴┴─┘└─┘┘└┘└─┘
 
     async def __serverloop(self):
+        async def execute_command(method, data):
+            """(callable, list) --> (result or exception) (only raises BaseException)."""
+            try: ret = await method(*data[0], **data[1])
+            except Exception as e:
+                a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
+                ret = e
+            return ret
+
+        def parse_statement(st):
+            """bytes --> (commandname, has_data, data, command, exception) (str, bool, bytes, callable, CommandError/None)."""
+            bdata, data, command, exception = b"", [], None, None
+            # Splits statement
+            try: idx = st.index(b" ")
+            except ValueError: commandname = st.decode()
+            else: commandname, bdata = st[:idx].decode(), st[idx+1:]
+            has_data = len(bdata) > 0
+            # Figures out method
+            try: command = self.commands_by_name[commandname]
+            except KeyError:
+                message = f"Command is non-existing: '{commandname}'"
+                self.logger.info(message)
+                exception = CommandError(message)
+            else: self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
+            # Processes data
+            if command:
+                data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
+                if not isinstance(data, list):
+                    exception = CommandError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
+                elif len(data) != 2 or type(data[0]) not in (list, tuple) or type(data[1]) != dict:
+                    exception = CommandError("Data must unpickle to a structure like this: [[...], {...}]")
+            return commandname, has_data, data, command, exception
+
+        async def recv_send():
+            try:
+                st = await sck_rep.recv()
+                commandname, has_data, data, command, exception = parse_statement(st)
+                if exception: ret = exception
+                else: ret = await execute_command(command.method, data)
+                msg = pickle.dumps(ret)
+                await sck_rep.send(msg)
+            except zmq.Again: ret = False
+            return ret
+
+        # INITIALIZATION
+        def _ctrl_z_handler(signum, frame):
+            print("😠 Don't do this, or clean-up code won't be executed; Ctl+C should do thou 😜")
+            flag_leave[0] = True
+        signal.signal(signal.SIGTSTP, _ctrl_z_handler)
+        signal.signal(signal.SIGTERM, _ctrl_z_handler)
+        flag_leave = [False]
+
+        self.cfg.read_configfile()
         a107.ensure_path(self.cfg.datadir)
-        self.__bind_rep()
-        await self._initialize_cmd()
+        ctx = zmq.asyncio.Context()
+        sck_rep = ctx.socket(zmq.REP)
+        logmsg = f"Binding ``{self.cfg.prefix}'' (REP) to {self.cfg.url    } ..."
+        self.cfg.logger.info(logmsg)
+        if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
+        sck_rep.bind(self.cfg.url)
         await self._on_run()
+        await self._initialize_cmd()
+        # MAIN LOOP ...
         self.__state = ST_LOOP
         try:
             while True:
-                try:
-                    did_sth = await self.__recv_send()
-                    if self.__check_stop(): break
-                    await self._after_cycle()
-                    if not did_sth:
-                        # print(f"SLEEPING {self.cfg.sleepinterval} seconds because didn't do shit")
-                        if self.cfg.sleepinterval > 0:
-                            await asyncio.sleep(self.cfg.sleepinterval)
-                    else:
-                        pass
-                except KeyboardInterrupt: self.__stop()
+                did_sth = await recv_send()
+                await self._after_cycle()
+                if not did_sth:
+                    # Sleeps because tired of doing nothing
+                    if self.cfg.sleepinterval > 0: await asyncio.sleep(self.cfg.sleepinterval)
         except asyncio.CancelledError: raise
+        except KeyboardInterrupt: return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
         except:
-            self.cfg.logger.exception(f"Server '{self.cfg.prefix}' crashed!")
+            self.cfg.logger.exception(f"Server '{self.cfg.prefix}' ☠C☠R☠A☠S☠H☠E☠D☠")
             raise
         finally:
+            print("😀 DON'T WORRY 😀")
             self.__state = ST_STOPPED
             self.cfg.logger.debug(f"{self.__class__.__name__}.__serverloop() finalliessssssssssssssssssssssssss")
             await self.wake_up()
-            await asyncio.sleep(0.1); await self.stop()  # Thought I might wait a bit before cancelling all loops
-            self.sck_rep.close()
-            self.ctx.destroy()
+            await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops
+            sck_rep.close()
+            ctx.destroy()
             await self._on_destroy()
-
-    def __bind_rep(self):
-        sck_rep = self.sck_rep = self.ctx.socket(zmq.REP)
-        logmsg = f"Binding ``{self.cfg.prefix}'' (REP) to {self.cfg.url    } ..."
-        self.cfg.logger.info(logmsg)
-        if not self.cfg.flag_log_console:
-            print(logmsg) # Prints it if not logging to console, so I know it is not just a frozen program
-        sck_rep.bind(self.cfg.url)
-
-    async def __recv_send(self):
-        """Returns whether did sth."""
-        try:
-            st = await self.sck_rep.recv()
-            commandname, has_data, data, command, exception = self.__parse_statement(st)
-            if exception: ret = exception
-            else: ret = await self.__execute_command(command.method, data)
-            msg = pickle.dumps(ret)
-            await self.sck_rep.send(msg)
-        except zmq.Again:
-            ret = False  # time.sleep(self.cfg.sleepinterval)
-        return ret
-
-    def __check_stop(self):
-        ret = False
-        if os.path.exists(self.cfg.stoppath):
-            self.cfg.logger.debug("Stopping because file '{}' exists".format(self.cfg.stoppath))
-            try:
-                os.unlink(self.cfg.stoppath)
-            except (PermissionError, FileNotFoundError):
-                pass
-
-            self.__stop()
-        if self.__flag_to_stop:
-            self.cfg.logger.info("Somebody told me to stop.")
-            ret = True
-        return ret
-
-    def __stop(self):
-        self.__flag_to_stop = True
-
-    def __parse_statement(self, st):
-        """Parses statement into usable information
-
-        Args:
-            st: (bytes) statement
-
-        Returns:
-            (commandname, has_data, data, command, exception), respectively (str, bool, bytes, callable, CommandError)
-        """
-        bdata, data, command, exception = b"", [], None, None
-        # Splits statement
-        try: idx = st.index(b" ")
-        except ValueError: commandname = st.decode()
-        else: commandname, bdata = st[:idx].decode(), st[idx+1:]
-        has_data = len(bdata) > 0
-        # Figures out method
-        try: command = self.commands_by_name[commandname]
-        except KeyError:
-            message = f"Command is non-existing: '{commandname}'"
-            self.logger.info(message)
-            exception = CommandError(message)
-        else: self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
-        # Processes data
-        if command:
-            data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
-            if not isinstance(data, list):
-                exception = CommandError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
-            elif len(data) != 2 or type(data[0]) not in (list, tuple) or type(data[1]) != dict:
-                exception = CommandError("Data must unpickle to a structure like this: [[...], {...}]")
-        return commandname, has_data, data, command, exception
-
-    async def __execute_command(self, method, data):
-        """Processes the statement received from client.
-
-        Args:
-            method: a (callable) method from some ServerCommands class
-            data: list
-
-        Returns:
-            result returned by method, or the raised exception (does not raise, returns the exception instead)
-        """
-        try:
-            ret = await method(*data[0], **data[1])
-        except Exception as e:
-            a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
-            ret = e
-        return ret
 
 
 class CommandError(Exception):
@@ -359,3 +238,16 @@ class _Sleeper:
         self.name = a107.random_name() if name is None else name
         self.task = None
         self.wake_up = False
+
+
+class _EssentialServerCommands(sl.ServerCommands):
+    async def _get_welcome(self):
+        return "\n".join(a107.format_slug(f"Welcome to the '{self.master.cfg.prefix}' server", random.randint(0, 2)))
+
+    async def _get_name(self):
+        """Returns the server application name."""
+        return self.cfg.applicationname
+
+    async def _get_prefix(self):
+        """Returns the server prefix."""
+        return self.cfg.prefix
