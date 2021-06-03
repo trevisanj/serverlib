@@ -1,5 +1,5 @@
 import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, os, textwrap, re, pl3
-from colored import fg, attr
+from colored import fg, bg, attr
 
 __all__ = ["Client", "ServerError", "TryAgain", "print_result"]
 
@@ -9,6 +9,7 @@ TIMEOUT = 30000  # miliseconds to wait until server replies
 COLOR_OKGREEN = fg("green")
 COLOR_FAIL = fg("red")
 COLOR_ERROR = fg("light_red")
+COLOR_FROM_SERVER = fg("black")+bg("dark_red_2")
 COLOR_HAPPY = fg("light_green")
 COLOR_SAD = fg("blue")
 COLOR_INPUT = fg("orange_1")
@@ -20,7 +21,6 @@ CST_ALIVE = 10    # passed __init__()
 CST_INITEDCMD = 20  # inited commands
 CST_LOOP = 30       # looping in command-line interface
 CST_STOPPED = 40    # stopped
-
 
 class Client(sl.WithCommands):
     """Client class."""
@@ -69,8 +69,10 @@ class Client(sl.WithCommands):
         statementdata = sl.parse_statement(statement, *args, **kwargs)
         ret, flag = await self.__execute_client_special(statementdata)
         if not flag:
+            flag_try_server = False
             try: ret = await self.__execute_client(statementdata)
-            except NotAClientCommand: ret = await self.__execute_server(statementdata)
+            except NotAClientCommand: flag_try_server = True
+            if flag_try_server: ret = await self.__execute_server(statementdata)
         return ret
 
     async def execute_client(self, statement, *args, **kwargs):
@@ -147,7 +149,7 @@ class Client(sl.WithCommands):
 
     async def __execute_client(self, statementdata):
         commandname, args, kwargs = statementdata
-        if not commandname in self.commands_by_name: raise NotAClientCommand()
+        if not commandname in self.commands_by_name: raise NotAClientCommand(f"Not a client command: '{commandname}'")
         method = self.commands_by_name[commandname].method
         ret = await method(*args, **kwargs)
         return ret
@@ -164,15 +166,16 @@ class Client(sl.WithCommands):
         from serverlib.server import CommandError
         try:
             ret = await self.execute(st)
-        except (CommandError, ServerError) as e:
+        except CommandError as e:
             # Here we treat specific exceptions raised by the server
             yoda("That work did not.", False)
             my_print_exception(e)
         except Exception as e:
             yoda("That work did not.", False)
             my_print_exception(e)
-            # self.logger.exception(f"Error executing statement '{st}'")
-            a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
+            if hasattr(e, "from_server"): pass
+            else:
+                a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
         else:
             self.__print_result(ret)
 
@@ -220,7 +223,9 @@ class Client(sl.WithCommands):
     def __process_result(self, b):
         ret = pickle.loads(b)
         if isinstance(ret, Exception):
-            raise ServerError(f"Error from server: {a107.fancilyquoted(a107.str_exc(ret))}")
+            ret.from_server = True
+            # e = ret.__class__(f"Error from server: {a107.fancilyquoted(str(ret))}")
+            raise ret
         return ret
 
     def __close(self):
@@ -263,8 +268,11 @@ def yoda(s, happy=True):
 
 
 def my_print_exception(e):
-    print("{}{}({}){}{} {}{}".format(COLOR_ERROR, attr("bold"), e.__class__.__name__,
-                                     attr("reset"), COLOR_ERROR, str(e), attr("reset")))
+    parts = []
+    if hasattr(e, "from_server"): parts.append(f'{COLOR_FROM_SERVER}(Error from server){attr("reset")}')
+    parts.append(f'{COLOR_ERROR}{attr("bold")}{e.__class__.__name__}:{attr("reset")}')
+    parts.append(f'{COLOR_ERROR}{str(e)}{attr("reset")}')
+    print(" ".join(parts))
 
 
 class NotAClientCommand(Exception):
@@ -276,18 +284,29 @@ class ServerError(Exception): pass
 
 class TryAgain(Exception):
     """Attempt to unify my network error reporting to users of this library (inspired in zmq.Again)."""
-    pass
+    def __init__(self, *args, to_wait=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.to_wait = to_wait
+
+
+_powertabulatemap = [
+    {"fieldnames": ("whenthis", "ts", "timestamp", "ts0", "ts1", "nexttime"),
+     "converter": lambda x: a107.dt2str(a107.to_datetime(x)),},
+    {"fieldnames": ("period",),
+     "converter": pl3.QP.to_str},
+    {"fieldnames": ("error", "lasterror",),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))}
+]
 
 
 def _powertabulate(rows, header, *args, **kwargs):
-    is_whenthis = [h in ("whenthis", "ts", "timestamp", "ts0", "ts1") for h in header]
-    is_period = [h == "period" for h in header]
-    numcols = len(header)
-    if any(is_whenthis) or any(is_period):
+    # TODO this easily becomes a conversion map
+    mymap = [[[i for i, h in enumerate(header) if h in row["fieldnames"]], row["converter"]] for row in _powertabulatemap]
+    mymap = [row for row in mymap if row[0]]
+    if mymap:
         for row in rows:
-            for i in range(numcols):
-                if is_whenthis[i]: row[i] = a107.dt2str(a107.to_datetime(row[i]))
-                elif is_period[i]: row[i] = pl3.QP.to_str(row[i])
+            for indexes, converter in mymap:
+                for i in indexes: row[i] = converter(row[i])
     return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
 
 
@@ -344,7 +363,7 @@ def print_result(ret):
     if isinstance(ret, str): print(ret)
     elif isinstance(ret, tuple) and len(ret) == 2 and isinstance(ret[0], list) and isinstance(ret[1], list):
         # Tries to detect "tabulate-like" (rows, headers) arguments
-        a107.print_girafales(_powertabulate((tabulate.tabulate(*ret))))
+        a107.print_girafales(_powertabulate(*ret))
     elif isinstance(ret, list): handle_list(ret)
     elif isinstance(ret, dict): handle_dict(ret)
     else: handle_default(ret)

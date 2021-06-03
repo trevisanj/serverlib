@@ -1,5 +1,5 @@
 """Server, ServerCommands etc."""
-import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, serverlib as sl, traceback
+import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random
 from colored import fg, bg, attr
 from .basicservercommands import *
 __all__ = ["Server", "CommandError", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
@@ -71,9 +71,9 @@ class Server(sl.WithCommands):
     async def wake_up(self, sleepername=None):
         """Cancel all "naps" created with self.sleep()."""
         if sleepername is not None:
-            self.__sleepers[sleepername].wake_up = True
+            self.__sleepers[sleepername].flag_wake_up = True
         else:
-            for sleeper in self.__sleepers.values(): sleeper.wake_up = True
+            for sleeper in self.__sleepers.values(): sleeper.flag_wake_up = True
 
     async def wait_a_bit(self):
         """Unified way to wait for a bit, usually before retrying something that goes wront."""
@@ -81,15 +81,30 @@ class Server(sl.WithCommands):
 
     async def sleep(self, to_wait, name=None):
         """Takes a nap that can be prematurely terminated with self.wake_up()."""
+        my_debug = lambda s: self.logger.debug(f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {to_wait:.3f} seconds {s}")
+
+        async def ensure_new_name():
+            i = 0
+            while sleeper.name in self.__sleepers:
+                if name is not None:
+                    # self.stop()
+                    msg = f"Called {self.__class__.__name__}.sleep({to_wait}, '{name}') when '{name}' is already sleeping!"
+                    raise RuntimeError(msg)
+                sleeper.name += (" " if i == 0 else "")+chr(random.randint(65, 65+25))
+                i += 1
+
         interval = min(to_wait, 0.1)
         sleeper = _Sleeper(to_wait, name)
+        await ensure_new_name()
         self.__sleepers[sleeper.name] = sleeper
         slept = 0
         try:
-            while slept < to_wait and not sleeper.wake_up:
+            my_debug("💤💤💤")
+            while slept < to_wait and not sleeper.flag_wake_up:
                 await asyncio.sleep(interval)
                 slept += interval
         finally:
+            my_debug("⏰WAKE⏰UP!⏰")
             try: del self.__sleepers[sleeper.name]
             except KeyError: pass
 
@@ -124,17 +139,17 @@ class Server(sl.WithCommands):
 
         self.__lo_ops = {attrname: create_task(attrname) for attrname in attrnames}
         results = await asyncio.gather(*self.__lo_ops.values(), return_exceptions=True)
-        self.logger.info(f"*** Server {self.cfg.prefix} -- how the story ended: ***")
+        self.logger.debug(f"*** Server {self.cfg.prefix} -- how the story ended: ***")
         for name, result in zip(attrnames, results):
             if isinstance(result, BaseException): result = a107.str_exc(result)
-            self.logger.info(f"{name}(): {result}")
+            self.logger.debug(f"{name}(): {result}")
 
     def stop(self):
         if self.__lo_ops is not None:
             for task in self.__lo_ops.values():
                 if not task.marked:
                     task.marked = True
-                    print(f"stop() cancelling {task}")
+                    # print(f"stop() cancelling {task}")
                     task.cancel()
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
@@ -146,7 +161,9 @@ class Server(sl.WithCommands):
             """(callable, list) --> (result or exception) (only raises BaseException)."""
             try: ret = await method(*data[0], **data[1])
             except Exception as e:
-                a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
+                if sl.flag_log_traceback:
+                    a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
+                else: self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
                 ret = e
             return ret
 
@@ -178,16 +195,16 @@ class Server(sl.WithCommands):
             try:
                 st = await sck_rep.recv()
                 commandname, has_data, data, command, exception = parse_statement(st)
-                if exception: ret = exception
-                else: ret = await execute_command(command.method, data)
-                msg = pickle.dumps(ret)
+                if exception: result = exception
+                else: result = await execute_command(command.method, data)
+                msg = pickle.dumps(result)
                 await sck_rep.send(msg)
-            except zmq.Again: ret = False
-            return ret
+            except zmq.Again: return False
+            return True
 
         # INITIALIZATION
         def _ctrl_z_handler(signum, frame):
-            print("😠 Don't do this, or clean-up code won't be executed; Ctl+C should do thou 😜")
+            print("Don't press Ctrl+Z 😠, or clean-up code won't be executed 😱; Ctl+C should do thou 😜")
             flag_leave[0] = True
         signal.signal(signal.SIGTSTP, _ctrl_z_handler)
         signal.signal(signal.SIGTERM, _ctrl_z_handler)
@@ -218,9 +235,8 @@ class Server(sl.WithCommands):
             self.cfg.logger.exception(f"Server '{self.cfg.prefix}' ☠C☠R☠A☠S☠H☠E☠D☠")
             raise
         finally:
-            print("😀 DON'T WORRY 😀")
             self.__state = ST_STOPPED
-            self.cfg.logger.debug(f"{self.__class__.__name__}.__serverloop() finalliessssssssssssssssssssssssss")
+            self.cfg.logger.debug(f"😀 DON'T WORRY 😀 {self.__class__.__name__}.__serverloop() 'finally:'")
             await self.wake_up()
             await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops
             sck_rep.close()
@@ -237,7 +253,7 @@ class _Sleeper:
         self.seconds = seconds
         self.name = a107.random_name() if name is None else name
         self.task = None
-        self.wake_up = False
+        self.flag_wake_up = False
 
 
 class _EssentialServerCommands(sl.ServerCommands):
@@ -250,4 +266,10 @@ class _EssentialServerCommands(sl.ServerCommands):
 
     async def _get_prefix(self):
         """Returns the server prefix."""
+        return self.cfg.prefix
+
+    async def _poke(self):
+        """Prints and returns the server prefix (useful to identify what is running in a terminal)."""
+        # print(f"👉 {self.cfg.prefix}")  # 👈")
+        print(f"{fg('white')}{attr('bold')}{self.cfg.prefix}{attr('reset')} 👈")
         return self.cfg.prefix

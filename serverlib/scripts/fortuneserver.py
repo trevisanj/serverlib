@@ -4,36 +4,44 @@ __doc__ = """A fucked-up fortune teller with sentences based on my online therap
 
 
 class FortuneCommands(serverlib.ServerCommands):
-    async def random_name(self):
-        """Generates a random human name."""
-        return a107.random_name()
+    def __init__(self, *args, **kwargs):
 
-    async def fortune(self, topic="counselling"):
-        """Fucked-up fortune teller."""
-        return self.__do(FORTUNES, topic)
+        def genericcommand(topic):
+            async def about_topic(self):
+                return "\n".join(textwrap.wrap(ra.choice(FORTUNES[topic]), 80))
 
-    async def question(self, topic="programming"):
-        return self.__do(QUESTIONS, topic)
+            about_topic.__doc__ = f"Tells fortune on {topic} topic."
+            # about_topic.__name__ = topic
+            bound_method = about_topic.__get__(self, self.__class__)
+            ret = bound_method
+            return ret
 
-    def __do(self, dictionary, topic):
-        if topic == "?":
-            return list(dictionary.keys())
-        else:
-            return "\n".join(textwrap.wrap(ra.choice(dictionary[topic]), 80))
 
-    async def random(self):
-        return ra.random()
+        for topic in FORTUNES.keys():
+            method = genericcommand(topic)
+            setattr(self, topic, method)
 
-    random.__doc__ = ra.random.__doc__
+        super().__init__(*args, **kwargs)
 
-    async def randint(self, a, b):
-        return ra.randint(int(a), int(b))
 
-    randint.__doc__ = ra.randint.__doc__
 
-    async def choice(self, *args):
-        """Returns one of the arguments passed randomly chosen."""
-        return ra.choice(args)
+    # async def random(self):
+    #     return ra.random()
+
+    # random.__doc__ = ra.random.__doc__
+
+    # async def randint(self, a, b):
+    #     return ra.randint(int(a), int(b))
+
+    # randint.__doc__ = ra.randint.__doc__
+
+    # async def choice(self, *args):
+    #     """Returns one of the arguments passed randomly chosen."""
+    #     return ra.choice(args)
+
+    # async def random_name(self):
+    #     """Generates a random human name."""
+    #     return a107.random_name()
 
 
 def main(args):
@@ -65,12 +73,10 @@ FORTUNES = {
     "In the long term, avoidance becomes the fuel for anxiety, because then you are living much more in your head and becoming attached to all sorts of thoughts and worries of the imagination. Exposure to the things we fear the most is a critical part of treatment.",
     "You can stand in the side of a pool all day wiring and imagining how cold it is going to be, but only by getting in and splashing around do you realize that the coldness was mostly relative.",
     "Codependency is a complicated concept in mental health having to do with boundaries. Codependents tend to \"take on\" the emotions of others and focus a bit too heavily on pleasing people.",
-],
-}
-
-QUESTIONS = {
+    ],
 "programming": [
     "Are you having fun?",
+    "Write user code first, as if the API already existed.",
 ],
 "dark": [
     "Just kill yourself, will you?",

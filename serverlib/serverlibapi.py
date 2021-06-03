@@ -130,6 +130,9 @@ def get_methods(obj, flag_protected=False):
     return [x for x in inspect.getmembers(obj, predicate=inspect.ismethod)
             if "__" not in x[0] and (flag_protected or not x[0].startswith("_"))
                and x[0] not in ("initialize", "close",)]
+    # return [x for x in inspect.getmembers(obj, predicate=inspect.ismethod)
+    #         if "__" not in x[0] and (flag_protected or not x[0].startswith("_"))
+    #            and x[0] not in ("initialize", "close",)]
 
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):

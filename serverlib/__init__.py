@@ -5,3 +5,5 @@ from .server import *
 from .tools import *
 from .intelligence import *
 from .basicservercommands import *
+
+flag_log_traceback = True

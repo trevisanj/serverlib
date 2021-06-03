@@ -18,12 +18,16 @@ class BasicServerCommands(sl.ServerCommands):
                 raise ValueError("Invalid method: '{}'. Use 'help()' to list methods.".format(what))
             return sl.format_method(self.master.commands_by_name[what].method)
 
-    async def stop(self):
+    async def ping(self):
+        """Returns "pong"."""
+        return "pong"
+
+    async def _stop(self):
         """Stops server. """
-        await self.master.stop()
+        self.master.stop()
         return "As you wish."
 
-    async def get_configuration(self):
+    async def _get_configuration(self):
         """Returns dict containing configuration information.
 
         Returns:
@@ -31,25 +35,25 @@ class BasicServerCommands(sl.ServerCommands):
         """
         return await self.master.get_configuration()
 
-    async def ping(self):
-        """Returns "pong"."""
-        return "pong"
-
-    async def wake_up(self, sleepername=None):
-        """Gently wakes up all sleepers."""
+    async def _wake_up(self, sleepername=None):
+        """Gently wakes up all sleepers or given sleeper."""
         await self.master.wake_up(sleepername)
 
-    async def sleepers(self):
+    async def _sleepers(self):
+        """Reports server sleepers as a list of dicts."""
         ret = [{"name": sleeper.name, "seconds": sleeper.seconds} for sleeper in self.master.sleepers.values()]
         return ret
 
+    # Creating sleepers from the client has no practical use. This command was created for debugging purpose.
+    # Maybe clean up when this topic is definitely finished.
     # This sleepers thing started as a humorous exercise to understand task cancellation and ended up somewhat serious
-    async def create_sleeper(self, seconds, name=None):
-        """Creates sleeper that sleepes seconds."""
+    async def _create_sleeper(self, seconds, name=None):
+        """Creates sleeper that sleeps seconds. Just for debugging."""
         seconds = float(seconds)
         asyncio.create_task(self.master.sleep(float(seconds), name))
 
-    async def loops(self):
+    async def _loops(self):
+        """Reports server loops as a list of dicts."""
         ret = []
         for name, task in self.master.lo_ops.items():
             ret.append({"name": name,
