@@ -79,28 +79,29 @@ class Server(sl.WithCommands):
         """Unified way to wait for a bit, usually before retrying something that goes wront."""
         await self.sleep(0.1)
 
-    async def sleep(self, to_wait, name=None):
+    async def sleep(self, waittime, name=None):
         """Takes a nap that can be prematurely terminated with self.wake_up()."""
-        my_debug = lambda s: self.logger.debug(f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {to_wait:.3f} seconds {s}")
+        my_debug = lambda s: self.logger.debug(f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
 
         async def ensure_new_name():
             i = 0
             while sleeper.name in self.__sleepers:
                 if name is not None:
                     # self.stop()
-                    msg = f"Called {self.__class__.__name__}.sleep({to_wait}, '{name}') when '{name}' is already sleeping!"
+                    msg = f"Called {self.__class__.__name__}.sleep({waittime}, '{name}') when '{name}' is already sleeping!"
                     raise RuntimeError(msg)
                 sleeper.name += (" " if i == 0 else "")+chr(random.randint(65, 65+25))
                 i += 1
 
-        interval = min(to_wait, 0.1)
-        sleeper = _Sleeper(to_wait, name)
+        if isinstance(waittime, sl.Retry): waittime = waittime.waittime
+        interval = min(waittime, 0.1)
+        sleeper = _Sleeper(waittime, name)
         await ensure_new_name()
         self.__sleepers[sleeper.name] = sleeper
         slept = 0
         try:
             my_debug("💤💤💤")
-            while slept < to_wait and not sleeper.flag_wake_up:
+            while slept < waittime and not sleeper.flag_wake_up:
                 await asyncio.sleep(interval)
                 slept += interval
         finally:

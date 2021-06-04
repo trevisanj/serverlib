@@ -7,3 +7,4 @@ from .intelligence import *
 from .basicservercommands import *
 
 flag_log_traceback = True
+waittime_retry = 1.

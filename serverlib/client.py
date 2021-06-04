@@ -1,7 +1,7 @@
 import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, os, textwrap, re, pl3
 from colored import fg, bg, attr
 
-__all__ = ["Client", "ServerError", "TryAgain", "print_result"]
+__all__ = ["Client", "ServerError", "Retry", "print_result"]
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
@@ -108,7 +108,7 @@ class Client(sl.WithCommands):
             # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
             self.__del_socket()
-            raise TryAgain(a107.str_exc(e))
+            raise Retry(a107.str_exc(e))
         ret = self.__process_result(b)
         return ret
 
@@ -282,11 +282,12 @@ class NotAClientCommand(Exception):
 class ServerError(Exception): pass
 
 
-class TryAgain(Exception):
+class Retry(Exception):
     """Attempt to unify my network error reporting to users of this library (inspired in zmq.Again)."""
-    def __init__(self, *args, to_wait=None, **kwargs):
+    def __init__(self, *args, waittime=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.to_wait = to_wait
+        # Use to hint how much time should pass before retrying
+        self.waittime = waittime if waittime is not None else sl.waittime_retry
 
 
 _powertabulatemap = [
@@ -306,7 +307,8 @@ def _powertabulate(rows, header, *args, **kwargs):
     if mymap:
         for row in rows:
             for indexes, converter in mymap:
-                for i in indexes: row[i] = converter(row[i])
+                for i in indexes:
+                    if row[i] is not None: row[i] = converter(row[i])
     return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
 
 
