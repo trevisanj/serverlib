@@ -1,5 +1,6 @@
 import a107, serverlib as sl
-__all__ = ["Intelligence"]
+__all__ = ["Intelligence",]
+# __all__ = ["Intelligence", "DummyMaster"]
 
 
 class Intelligence:
@@ -49,3 +50,9 @@ class Intelligence:
 
     async def initialize(self):
         pass
+
+# # The idea might be interesting, but not needed so far
+# class DummyMaster:
+#     def __init__(self, logger=None, cfg=None):
+#         self.logger = logger
+#         self.cfg = cfg

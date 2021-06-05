@@ -80,7 +80,8 @@ FORTUNES = {
 ],
 "dark": [
     "Just kill yourself, will you?",
-    "Did you kill yourself already?"
+    "Did you kill yourself already?",
+    "All effort is pointless, since in the end you will just die hitting the curb with your head",
 ],
 }
 
