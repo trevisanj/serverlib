@@ -1,5 +1,6 @@
 import atexit, sys, signal, readline, zmq, zmq.asyncio, pickle, tabulate, a107, time, serverlib as sl, os, textwrap, re, pl3
 from colored import fg, bg, attr
+from contextlib import redirect_stdout
 
 __all__ = ["Client", "ServerError", "Retry", "print_result"]
 
@@ -48,6 +49,7 @@ class Client(sl.WithCommands):
         self.flag_needs_to_reset_colors = False
         if cmd is not None: self._attach_cmd(cmd)
         self.__ctx, self.__socket = None, None
+        self.__outputfilename = None
         self.__state = CST_ALIVE
 
     def __enter__(self):
@@ -66,7 +68,7 @@ class Client(sl.WithCommands):
     async def execute(self, statement, *args, **kwargs):
         """Executes statemen; tries special, then client-side, then server-side."""
         await self.__assure_initialized_cmd()
-        statementdata = sl.parse_statement(statement, *args, **kwargs)
+        statementdata = self.__parse_statement(statement, *args, **kwargs)
         ret, flag = await self.__execute_client_special(statementdata)
         if not flag:
             flag_try_server = False
@@ -78,7 +80,7 @@ class Client(sl.WithCommands):
     async def execute_client(self, statement, *args, **kwargs):
         """Executes statement; tries special, then client-side."""
         await self.__assure_initialized_cmd()
-        statementdata = sl.parse_statement(statement, *args, **kwargs)
+        statementdata = self.__parse_statement(statement, *args, **kwargs)
         ret, flag = await self.__execute_client_special(statementdata)
         if not flag:
             ret = await self.__execute_client(statementdata)
@@ -88,7 +90,7 @@ class Client(sl.WithCommands):
         """Executes statement directly on the server."""
         assert isinstance(statement, str)
         await self.__assure_initialized_cmd()
-        statementdata = sl.parse_statement(statement, *args, **kwargs)
+        statementdata = self.__parse_statement(statement, *args, **kwargs)
         return await self.__execute_server(statementdata)
     
     async def execute_bytes(self, bst):
@@ -136,6 +138,10 @@ class Client(sl.WithCommands):
             self.__state = CST_STOPPED
 
     # PRIVATE
+
+    def __parse_statement(self, statement, *args, **kwargs):
+        commandname, args, kwargs, self.__outputfilename = sl.parse_statement(statement, *args, **kwargs)
+        return commandname, args, kwargs
     
     async def __assure_initialized_cmd(self):
         if self.__state < CST_INITEDCMD: 
@@ -168,10 +174,10 @@ class Client(sl.WithCommands):
             ret = await self.execute(st)
         except CommandError as e:
             # Here we treat specific exceptions raised by the server
-            yoda("That work did not.", False)
+            yoda("Try not -- do it you must.", False)
             my_print_exception(e)
         except Exception as e:
-            yoda("That work did not.", False)
+            yoda("Try not -- do it you must.", False)
             my_print_exception(e)
             if hasattr(e, "from_server"): pass
             else:
@@ -258,12 +264,23 @@ class Client(sl.WithCommands):
                 return sl.format_method(self.commands_by_name[what].method)
 
     def __print_result(self, ret):
-        yoda("Happy I am.", True)
-        print_result(ret)
+        def do_print(flag_colors):
+            print_result(ret, self.logger, flag_colors)
+
+        if self.__outputfilename:
+            yoda(f"To file '{self.__outputfilename}' output written will be.", True)
+            with open(self.__outputfilename, 'w') as f:
+                with redirect_stdout(f):
+                    do_print(False)
+        else:
+            yoda("Strong with the force you are.", True)
+            do_print(True)
+
 
 def yoda(s, happy=True):
+    if s.endswith("."): s = s[:-1]+" ·"  # Yoda levitates the period
     print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")
-    print("{0}|o_o|{0} -- {1}".format("^" if happy else "v", s), end="")
+    print("{0}|o_o|{0} -- {1}".format("^" if happy else "v", s), end="")  # ◐◑
     print(attr("reset")*2)
 
 
@@ -291,24 +308,33 @@ class Retry(Exception):
 
 
 _powertabulatemap = [
-    {"fieldnames": ("whenthis", "ts", "timestamp", "ts0", "ts1", "nexttime"),
+    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "nexttime"),
      "converter": lambda x: a107.dt2str(a107.to_datetime(x)),},
+     # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
     {"fieldnames": ("period",),
      "converter": pl3.QP.to_str},
     {"fieldnames": ("error", "lasterror",),
-     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))}
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
+    {"fieldnames": ("narration",),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
 ]
 
 
-def _powertabulate(rows, header, *args, **kwargs):
-    # TODO this easily becomes a conversion map
+def _powertabulate(rows, header, logger=None, *args, **kwargs):
+    def get_logger():
+        return logger if logger is not None else a107.get_python_logger()
     mymap = [[[i for i, h in enumerate(header) if h in row["fieldnames"]], row["converter"]] for row in _powertabulatemap]
     mymap = [row for row in mymap if row[0]]
     if mymap:
         for row in rows:
             for indexes, converter in mymap:
                 for i in indexes:
-                    if row[i] is not None: row[i] = converter(row[i])
+                    try:
+                        if row[i] is not None: row[i] = converter(row[i])
+                    except Exception as e:
+                        get_logger().info(f"Error '{a107.str_exc(e)}' while trying to apply convertion to field '{header[i]}' with value {repr(row[i])}")
+                        raise
+
     return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
 
 
@@ -317,7 +343,9 @@ def _detect_girafales(s):
     return any(line.startswith("-") and line.count("-") > len(line)/2 for line in lines)
 
 
-def print_result(ret):
+def print_result(ret, logger=None, flag_colors=True):
+    print_tabulated = a107.print_girafales if flag_colors else print
+
     def print_header(k, level):
         print(attr('bold')+COLOR_HEADER+"\n".join(a107.format_h(level+1, k))+attr("reset"))
 
@@ -327,7 +355,7 @@ def print_result(ret):
                 excluded = ("info",)
                 header = [k for k in arg[0].keys() if k not in excluded]
                 rows = [[v for k, v in row.items() if k not in excluded] for row in arg]
-                a107.print_girafales(_powertabulate(rows, header))
+                print_tabulated(_powertabulate(rows, header))
             else: print("\n".join([str(x) for x in arg]))  # Experimental: join list elements with "\n"
         else: handle_default(arg)
 
@@ -337,7 +365,7 @@ def print_result(ret):
             if isinstance(first, dict):
                 # dict of dicts: converts key to column
                 rows = [[k, *v.values()] for k, v in arg.items()]; header = ["key", *first.keys()]
-                a107.print_girafales(_powertabulate(rows, header))
+                print_tabulated(_powertabulate(rows, header, logger=logger))
             elif isinstance(first, (tuple, list)):
                 # dict of lists: prints keys as titles and processes lists
                 for i, (k, v) in enumerate(arg.items()):
@@ -356,7 +384,7 @@ def print_result(ret):
     def handle_default(arg):
         if not isinstance(arg, str): arg = str(arg)
         if "\n" in arg:
-            if _detect_girafales(arg): a107.print_girafales(arg)
+            if _detect_girafales(arg): print_tabulated(arg)
             else: print(arg)
         else:
             arg = re.sub(r'\s+', ' ', arg)
@@ -365,7 +393,7 @@ def print_result(ret):
     if isinstance(ret, str): print(ret)
     elif isinstance(ret, tuple) and len(ret) == 2 and isinstance(ret[0], list) and isinstance(ret[1], list):
         # Tries to detect "tabulate-like" (rows, headers) arguments
-        a107.print_girafales(_powertabulate(*ret))
+        print_tabulated(_powertabulate(*ret))
     elif isinstance(ret, list): handle_list(ret)
     elif isinstance(ret, dict): handle_dict(ret)
     else: handle_default(ret)

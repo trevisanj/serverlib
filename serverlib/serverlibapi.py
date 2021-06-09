@@ -194,7 +194,8 @@ def cfg2dict(cfg, flag_clean=True):
 
 
 def parse_statement(statement, *args_, **kwargs_):
-    """Parses statement and returns (commandname, args, kwargs)"""
+    """Parses statement and returns (commandname, args, kwargs, outputfilename)"""
+    outputfilename = None
     try:
         index = statement.index(" ")
     except ValueError:
@@ -204,4 +205,7 @@ def parse_statement(statement, *args_, **kwargs_):
         args, kwargs = a107.str2args(statement[index+1:])
     if args_: args.extend(args_)
     if kwargs_: kwargs.update(kwargs_)
-    return commandname, args, kwargs
+    if args:
+        if isinstance(args[-1], str) and args[-1].startswith(">>>"):
+            outputfilename = args.pop()[3:]
+    return commandname, args, kwargs, outputfilename

@@ -139,17 +139,16 @@ class ServerConfig(BaseConfig):
     """Configuration for servers
 
     Args:
-        sleepinterval: (seconds) time to sleep if didn't receive any requests at cycle
+        sleepinterval: (seconds) time to sleep if didn't receive any requests in serverloop cycle
     """
 
     defaultsuffix = "server"
     defaulthost = "*"
     default_flag_log_file = True
 
-    def __init__(self, *args, sleepinterval=0.001, servername=None, **kwargs):
+    def __init__(self, *args, sleepinterval=0.001, **kwargs):
         super().__init__(*args, **kwargs)
         self.sleepinterval = sleepinterval
-        self.__servername = servername
 
 
 class ClientConfig(BaseConfig):
