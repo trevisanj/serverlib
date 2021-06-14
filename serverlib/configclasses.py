@@ -5,6 +5,13 @@ class BaseConfig:
 
     Implements certain conventions on directories, configuration and log filenames based on the application name, see
     properties.
+
+    Args:
+        applicationname: "umbrella" name affecting self.autodir=="~/.<applicationname>"
+        datadir: data directory. If undefined, falls back to self.autodir
+        prefix: "sub-applicationname". If undefined, falls back to applicationname. Affects all properties "<*>path".
+                Use for complex-structured applications with several servers. Otherwise, use applicationname and
+                leave this.
     """
     defaulthost = None
     defaultsuffix = None
@@ -69,8 +76,18 @@ class BaseConfig:
                                            level=self.logginglevel)
         return self.__logger
 
-    def __init__(self, applicationname=None, configdir=None, flag_log_file=None, flag_log_console=None, datadir=None,
-                 host=None, port=None, logginglevel=None, prefix=None, suffix=None, description=None):
+    def __init__(self,
+                 applicationname=None,
+                 configdir=None,
+                 flag_log_file=None,
+                 flag_log_console=None,
+                 datadir=None,
+                 host=None,
+                 port=None,
+                 logginglevel=None,
+                 prefix=None,
+                 suffix=None,
+                 description=None):
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.suffix"
         assert self.defaulthost is not None, f"Forgot to set {self.__class__.__name__}.defaulthost"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"

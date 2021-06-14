@@ -6,7 +6,7 @@ def main(args):
     cfg = serverlib.ClientConfig()
     cfg.host = args.host
     cfg.port = args.port
-    cfg.applicationname = "fortune"
+    # cfg.applicationname = "fortune"
     cfg.flag_log_file = True
     cfg.flag_log_console = False
     cfg.description = __doc__

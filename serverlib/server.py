@@ -69,7 +69,7 @@ class Server(sl.WithCommands):
         return ret
 
     async def wake_up(self, sleepername=None):
-        """Cancel all "naps" created with self.sleep()."""
+        """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
         if sleepername is not None:
             self.__sleepers[sleepername].flag_wake_up = True
         else:
@@ -215,7 +215,7 @@ class Server(sl.WithCommands):
         a107.ensure_path(self.cfg.datadir)
         ctx = zmq.asyncio.Context()
         sck_rep = ctx.socket(zmq.REP)
-        logmsg = f"Binding ``{self.cfg.prefix}'' (REP) to {self.cfg.url    } ..."
+        logmsg = f"Binding ``{self.cfg.prefix}'' (REP) to {self.cfg.url} ..."
         self.cfg.logger.info(logmsg)
         if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
         sck_rep.bind(self.cfg.url)
