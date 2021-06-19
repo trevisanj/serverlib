@@ -68,7 +68,7 @@ class Server(sl.WithCommands):
         ret = list(_ret.items()), ["key", "value"]
         return ret
 
-    async def wake_up(self, sleepername=None):
+    def wake_up(self, sleepername=None):
         """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
         if sleepername is not None:
             self.__sleepers[sleepername].flag_wake_up = True
@@ -238,7 +238,7 @@ class Server(sl.WithCommands):
         finally:
             self.__state = ST_STOPPED
             self.cfg.logger.debug(f"😀 DON'T WORRY 😀 {self.__class__.__name__}.__serverloop() 'finally:'")
-            await self.wake_up()
+            self.wake_up()
             await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops
             sck_rep.close()
             ctx.destroy()

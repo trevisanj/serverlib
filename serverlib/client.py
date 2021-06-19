@@ -273,7 +273,7 @@ class Client(sl.WithCommands):
                 with redirect_stdout(f):
                     do_print(False)
         else:
-            yoda("Strong with the force you are.", True)
+            yoda("Strong in you the force is.", True)
             do_print(True)
 
 

@@ -37,7 +37,7 @@ class BasicServerCommands(sl.ServerCommands):
 
     async def _wake_up(self, sleepername=None):
         """Gently wakes up all sleepers or given sleeper."""
-        await self.master.wake_up(sleepername)
+        self.master.wake_up(sleepername)
 
     async def _sleepers(self):
         """Reports server sleepers as a list of dicts."""

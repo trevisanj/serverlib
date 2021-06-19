@@ -10,18 +10,19 @@ def print_wow(s):
 
 
 class Publisher(sl.Intelligence):
-    def __init__(self, master, url):
+    def __init__(self, master, hopo):
         super().__init__(master)
-        self.url = url
+        self.hopo = hopo
 
     async def initialize(self):
         self.context = zmq.asyncio.Context()
         self.socket = self.context.socket(zmq.PUB)
-        logmsg = f"Binding socket (PUB) to {self.url} ..."
+        url = sl.hopo2url(self.hopo, "*")
+        logmsg = f"Binding socket (PUB) to {url} ..."
         self.logger.info(logmsg)
         if self.cfg is None or not hasattr(self.cfg, "flag_log_console") or not self.cfg.flag_log_console:
             print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
-        self.socket.bind(self.url)
+        self.socket.bind(url)
 
     async def close(self):
         print("Closing PUB server <<<<<<<<<<<<<<<<<<")
@@ -34,23 +35,25 @@ class Publisher(sl.Intelligence):
         await self.socket.send_string(msg)
 
 
-async def subscriber(url, subscriptions):
+async def subscriber(hopos, subscriptions):
     """ZMQ SUB client.
 
     Example:
 
     >>> def main():
-    >>>     url = f"tcp://localhost:9999"
-    >>>     async for msg in subscriber(url, ["beep", "print"]):
+    >>>     async for msg in subscriber(("localhost", 9999), ["beep", "print"]):
     >>>         print(f"Received '{msg}')
     """
-
     print_wow("subscriber() is alive")
+    if isinstance(hopos, (int, str)):
+        hopos = [hopos]
     context = zmq.asyncio.Context()
     socket = context.socket(zmq.SUB)
     try:
-        print_wow(f"Connecting to {url}...")
-        socket.connect(url)
+        for hopo in hopos:
+            url = sl.hopo2url(hopo)
+            print_wow(f"Connecting to {url}...")
+            socket.connect(url)
         for topic in subscriptions:
             print_wow(f"Subscribing to '{topic}")
             socket.setsockopt_string(zmq.SUBSCRIBE, topic)
