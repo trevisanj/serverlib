@@ -177,7 +177,7 @@ class Server(sl.WithCommands):
             else: commandname, bdata = st[:idx].decode(), st[idx+1:]
             has_data = len(bdata) > 0
             # Figures out method
-            try: command = self.commands_by_name[commandname]
+            try: command = self.metacommands[commandname]
             except KeyError:
                 message = f"Command is non-existing: '{commandname}'"
                 self.logger.info(message)

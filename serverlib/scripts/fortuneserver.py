@@ -10,8 +10,8 @@ class FortuneCommands(serverlib.ServerCommands):
             async def about_topic(self):
                 return "\n".join(textwrap.wrap(ra.choice(FORTUNES[topic]), 80))
 
-            about_topic.__doc__ = f"Tells fortune on {topic} topic."
-            # about_topic.__name__ = topic
+            about_topic.__doc__ = f"Tells fortune on '{topic}' topic."
+            about_topic.__name__ = topic
             bound_method = about_topic.__get__(self, self.__class__)
             ret = bound_method
             return ret

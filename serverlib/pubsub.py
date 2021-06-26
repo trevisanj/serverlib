@@ -55,7 +55,7 @@ async def subscriber(hopos, subscriptions):
             print_wow(f"Connecting to {url}...")
             socket.connect(url)
         for topic in subscriptions:
-            print_wow(f"Subscribing to '{topic}")
+            print_wow(f"Subscribing to '{topic}'")
             socket.setsockopt_string(zmq.SUBSCRIBE, topic)
         while True:
             print_wow("Waiting for message...")

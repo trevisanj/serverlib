@@ -38,10 +38,10 @@ class Intelligence:
             raise TypeError("self.master must either be a serverlib.Server or have a 'server' attribute")
         return self.master.server
 
-    def __init__(self, master):
+    def __init__(self, master, cfg=None):
         self.master = master
         self.__logger = None
-        self.__cfg = None
+        self.__cfg = cfg
 
     # INHERITABLES
 

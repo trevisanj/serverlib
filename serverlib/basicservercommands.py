@@ -3,20 +3,25 @@ __all__ = ["BasicServerCommands"]
 
 
 class BasicServerCommands(sl.ServerCommands):
-    async def help(self, what=None):
-        """Gets summary of available server commands or help on specific command."""
+    async def _help(self, what=None):
+        """Gets summary of available server commands or help on specific command.
+
+        This command was made protected to make the point that "?" is the preferred way to get help at the client side.
+        """
         if what is None:
-            name_method = [(k, v.method) for k, v in self.master.commands_by_name.items()]
-            aname = self.master.cfg.prefix
-            lines = [aname, "="*len(aname)]
-            if self.master.cfg.description: lines.extend(sl.format_description(self.master.cfg.description))
-            lines.append("")
-            lines.extend(sl.format_name_method(name_method))
-            return "\n".join(lines)
+            cfg = self.master.cfg
+            # text = sl.make_help(title=cfg.prefix,
+            #                     description=cfg.description,
+            #                     cmd=self.master.cmd, flag_protected=True)
+            # return text
+            helpdata = sl.make_helpdata(title=cfg.prefix,
+                                        description=cfg.description,
+                                        cmd=self.master.cmd, flag_protected=True)
+            return helpdata
         else:
-            if what not in self.master.commands_by_name:
-                raise ValueError("Invalid method: '{}'. Use 'help()' to list methods.".format(what))
-            return sl.format_method(self.master.commands_by_name[what].method)
+            if what not in self.master.metacommands:
+                raise ValueError("Invalid method: '{}'".format(what))
+            return sl.format_method(self.master.metacommands[what].method)
 
     async def ping(self):
         """Returns "pong"."""

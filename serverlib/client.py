@@ -23,6 +23,11 @@ CST_INITEDCMD = 20  # inited commands
 CST_LOOP = 30       # looping in command-line interface
 CST_STOPPED = 40    # stopped
 
+POSTHELP = """In addition, output can be directed to a file by using the always-available argument syntax:
+
+   >>>filename
+"""
+
 class Client(sl.WithCommands):
     """Client class."""
 
@@ -155,8 +160,8 @@ class Client(sl.WithCommands):
 
     async def __execute_client(self, statementdata):
         commandname, args, kwargs = statementdata
-        if not commandname in self.commands_by_name: raise NotAClientCommand(f"Not a client command: '{commandname}'")
-        method = self.commands_by_name[commandname].method
+        if not commandname in self.metacommands: raise NotAClientCommand(f"Not a client command: '{commandname}'")
+        method = self.metacommands[commandname].method
         ret = await method(*args, **kwargs)
         return ret
 
@@ -164,7 +169,7 @@ class Client(sl.WithCommands):
         commandname, args, kwargs = statementdata
         ret, flag = None, False
         if commandname == "?":
-            flag, ret = True, self.__clienthelp(*args, **kwargs)
+            flag, ret = True, await self.__clienthelp(*args, **kwargs)
         return ret, flag
 
     async def __execute_in_loop(self, st):
@@ -248,20 +253,24 @@ class Client(sl.WithCommands):
                 raise
             self.__socket = None
 
-    def __clienthelp(self, what=None, *args, **kwargs):
+    async def __clienthelp(self, what=None, *args, **kwargs):
             if not what:
-                name_method = [(k, v.method) for k, v in self.commands_by_name.items() if not "__" in k]
-                name_descr = [("?", "print this (client-side help)"),
-                              ("help", "server-side help"),
-                              ("exit", "exit client"),]
-                name_descr.extend([(name, a107.get_obj_doc0(method)) for name, method in name_method])
-                headline = "Client-side commands"
-                lines = [headline, "="*len(headline), ""]+sl.format_name_method(name_method)
-                return "\n".join(lines)
+                helpdata = await self.execute_server("_help")
+                clientgroups = sl.make_groups(self.cmd)
+                specialgroup = sl.HelpGroup(title="Client-side specials", items=[
+                    sl.HelpItem("?", "complete help"),
+                    sl.HelpItem("exit", "exit client"),
+                    sl.HelpItem("... >>>filename", "redirects output to file"),])
+                helpdata.groups = [specialgroup]+clientgroups+helpdata.groups
+
+                text = sl.make_text(helpdata)
+                return text
             else:
-                if what not in self.commands_by_name:
-                    raise ValueError("Invalid method: '{}'. Use '?' to list client-side methods.".format(what))
-                return sl.format_method(self.commands_by_name[what].method)
+                # if what not in self.metacommands:
+                #     raise ValueError("Invalid method: '{}'. Use '?' to list client-side methods.".format(what))
+                if what in self.metacommands:
+                    return sl.format_method(self.metacommands[what].method)
+                return await self.execute_server("_help", what)
 
     def __print_result(self, ret):
         def do_print(flag_colors):
@@ -378,8 +387,16 @@ def print_result(ret, logger=None, flag_colors=True):
                     if i > 0: print()
                     print_header(k, level)
                     print(v)
-            else: handle_default(arg)
+            else:
+                # "simple dict": 2-column (key, value) tabloe
+                rows = [(k, v) for k, v in arg.items()]; header = ["key", "value"]
+                print_tabulated(_powertabulate(rows, header, logger=logger))
+
         else: handle_default(arg)
+
+    def handle_helpdata(arg):
+        text = sl.make_text(arg)
+        print(text)
 
     def handle_default(arg):
         if not isinstance(arg, str): arg = str(arg)
@@ -396,4 +413,5 @@ def print_result(ret, logger=None, flag_colors=True):
         print_tabulated(_powertabulate(*ret))
     elif isinstance(ret, list): handle_list(ret)
     elif isinstance(ret, dict): handle_dict(ret)
+    elif isinstance(ret, sl.HelpData): handle_helpdata(ret)
     else: handle_default(ret)
