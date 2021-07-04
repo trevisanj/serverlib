@@ -26,6 +26,9 @@ class HelpGroup:
     title: str
     items: List[HelpItem]
 
+    def __len__(self):
+        return len(self.items)
+
 
 @dataclass
 class HelpData:
@@ -85,13 +88,14 @@ def make_text(helpdata):
     def format_oneliner(helpitem):
         return f"{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
 
-    methodlen = max([max([len(item.name) for item in helpgroup.items]) for helpgroup in helpdata.groups])
+    methodlen = max([max([len(item.name) for item in helpgroup.items]) for helpgroup in helpdata.groups if len(helpgroup) > 0])
 
     lines = format_title(helpdata)
     if helpdata.description: lines.extend(format_description(helpdata.description))
     lines.append("")
 
     for helpgroup in helpdata.groups:
+        if len(helpgroup) == 0: continue
         lines.append(format_grouptitle(helpgroup))
         for helpitem in helpgroup.items:
             lines.append(format_oneliner(helpitem))
