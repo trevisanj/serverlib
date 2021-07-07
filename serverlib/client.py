@@ -317,7 +317,7 @@ class Retry(Exception):
 
 
 _powertabulatemap = [
-    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "nexttime"),
+    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "nexttime", "whenthisenter", "whenthisexit"),
      "converter": lambda x: a107.dt2str(a107.to_datetime(x)),},
      # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
     {"fieldnames": ("period",),

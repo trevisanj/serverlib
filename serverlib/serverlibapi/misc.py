@@ -5,6 +5,11 @@ import a107
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):
     """Resolves (host, port) tuple into URL string."""
+    if isinstance(hopo, str):
+        # Verifies if it is the case of a port specified as str
+        try: hopo = int(hopo)
+        except ValueError: pass
+
     if isinstance(hopo, int):
         # Only port was specified
         host = fallbackhost

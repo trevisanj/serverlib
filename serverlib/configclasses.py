@@ -49,6 +49,10 @@ class BaseConfig:
         return self.__datadir if self.__datadir is not None else self.autodir
 
     @property
+    def reportdir(self):
+        return self.__reportdir if self.__reportdir is not None else "/tmp"
+
+    @property
     def configpath(self):
         location = self.configdir
         filename = f"{self.prefix}-{self.defaultsuffix}.cfg"
@@ -87,7 +91,8 @@ class BaseConfig:
                  logginglevel=None,
                  prefix=None,
                  suffix=None,
-                 description=None):
+                 description=None,
+                 reportdir=None):
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.suffix"
         assert self.defaulthost is not None, f"Forgot to set {self.__class__.__name__}.defaulthost"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
@@ -96,6 +101,7 @@ class BaseConfig:
         if flag_log_file is None: flag_log_file = a107.flag_log_file
         self.__configdir = configdir
         self.__datadir = datadir
+        self.__reportdir = reportdir
         self.__logger = None
         self.master = None  # Server or Client
         self.applicationname = applicationname
