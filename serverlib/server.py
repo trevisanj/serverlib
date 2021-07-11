@@ -128,7 +128,10 @@ class Server(sl.WithCommands):
                 if isinstance(e, asyncio.CancelledError): return e
                 # BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE
                 # Here is the unified place to decide what to do with high-bug-probability errors
-                print(f"🐛🐛🐛 {attr('bold')}Crash in {self.__class__.__name__}.{attrname}(){attr('reset')} 🐛🐛🐛")
+                middles = [f"Crash in {self.__class__.__name__}.{attrname}()", "Loops and errors:"]
+                middles.extend([f"  {'🦓' if v.errormessage else '🐱'} {k}: {v.errormessage}" for k, v in self.__lo_ops.items()])
+                for s in middles:
+                    print(f"🐛🐛🐛 {attr('bold')}{s}{attr('reset')}")
                 traceback.print_exc()
                 raise
 

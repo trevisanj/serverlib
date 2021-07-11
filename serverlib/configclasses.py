@@ -1,5 +1,9 @@
 """BaseConfig class"""
+
+__all__ = ["BaseConfig", "ServerConfig", "ClientConfig"]
+
 import os, a107, configobj, serverlib as sl
+
 class BaseConfig:
     """Common functionality for ClientConfig and ServerConfig.
 

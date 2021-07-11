@@ -17,3 +17,6 @@ Why do I always struggle between different ways to do things? The great is the e
 
 #20210405
 OK, I think I got this working.
+
+# 20210711
+There is a difference between _on_initialize() and _do_initialize(). They both clearly name methods that can be overriden. But the former is optional and is called in the middle of other stuff happening, whereas the latter is responsible for doing something important, it is relied on. THe first one is like: "if you need to perform something at this point in the program execution, we let you put it inside this method", whereas the latter is like: "you better figure out how to do this or let me do it in some default way"

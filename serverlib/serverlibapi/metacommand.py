@@ -12,6 +12,7 @@ class MetaCommand:
     def __init__(self, method):
         self.method = method
         self.name = method.__name__
+        self.flag_awaitable = inspect.iscoroutinefunction(method)
         pars = inspect.signature(method).parameters
         # Note: flag_bargs is only effective on the server side
         flag_bargs = "bargs" in pars

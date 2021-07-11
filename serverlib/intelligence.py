@@ -1,15 +1,19 @@
-import a107, serverlib as sl
 __all__ = ["Intelligence",]
-# __all__ = ["Intelligence", "DummyMaster"]
+
+import a107, serverlib as sl, asyncio, inspect
 
 
-class Intelligence:
-    """Intelligence base class: master, server, logger, cfg, initialize() and close()."""
-    _name = None
+class Intelligence(sl.WithClosers):
+    """Intelligence base class: master, server, logger, cfg, initialize(), close(), _append_closers() etc."""
+
+    # Custom title for this class, e.g. appearing as the title of a group of commands in help text
+    _title = None
+    # Methods that shouldn't be exposed as commands
+    _excluded = []
 
     @property
-    def name(self):
-        if self._name: return self._name
+    def title(self):
+        if self._title: return self._title
         return self.__class__.__name__
 
     @property
@@ -33,26 +37,39 @@ class Intelligence:
     @property
     def server(self):
         if isinstance(self.master, sl.Server): return self.master
-        elif isinstance(self.master, sl.Client): return None
-        if not hasattr(self.master, "server"):
-            raise TypeError("self.master must either be a serverlib.Server or have a 'server' attribute")
-        return self.master.server
+        return None
+        # elif isinstance(self.master, sl.Client): return None
+        # if not hasattr(self.master, "server"):
+        #     raise TypeError("self.master must either be a serverlib.Server or have a 'server' attribute")
+        # return self.master.server
 
-    def __init__(self, master, cfg=None):
+    def __init__(self, master=None, cfg=None):
+        super().__init__()
         self.master = master
         self.__logger = None
         self.__cfg = cfg
 
-    # INHERITABLES
+    # INTERFACE
 
-    async def close(self):
-        pass
+    def get_meta(self, flag_protected=True):
+        """Returns list of MetaCommand objects filtered according to rules."""
+        return [sl.MetaCommand(method) for method in self.get_methods(flag_protected)]
+
+    def get_methods(self, flag_protected=False):
+        """Return list of methods according to filter rules."""
+
+        _superexcluded = ("initialize", "close", "get_methods", "get_meta")
+        return [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
+                if "__" not in x[0]
+                and not x[0].startswith(("_on_", "_append_closer"))
+                and (flag_protected or not x[0].startswith("_"))
+                and x[0] not in _superexcluded and x[0] not in self._excluded]
 
     async def initialize(self):
+        await self._on_initialize()
+
+    # INHERITABLES
+
+    async def _on_initialize(self):
         pass
 
-# # The idea might be interesting, but not needed so far
-# class DummyMaster:
-#     def __init__(self, logger=None, cfg=None):
-#         self.logger = logger
-#         self.cfg = cfg

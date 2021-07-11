@@ -41,10 +41,10 @@ def make_groups(cmd, flag_protected=True):
     groups = []
     for commands in cmd.values():
         items = []
-        meta = commands.__get_meta__(flag_protected)
+        meta = commands.get_meta(flag_protected)
         for metacommand in meta:
             items.append(HelpItem(metacommand.name, metacommand.oneliner))
-        groups.append(HelpGroup(commands.name, items))
+        groups.append(HelpGroup(commands.title, items))
     return groups
 
 def make_helpdata(title, description, cmd, flag_protected):

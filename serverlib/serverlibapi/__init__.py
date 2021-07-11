@@ -1,5 +1,4 @@
 from .misc import *
 from .metacommand import *
-from .commands import *
-from .withcommands import *
+from .parts import *
 from .helpmaking import *

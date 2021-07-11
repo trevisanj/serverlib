@@ -161,8 +161,12 @@ class Client(sl.WithCommands):
     async def __execute_client(self, statementdata):
         commandname, args, kwargs = statementdata
         if not commandname in self.metacommands: raise NotAClientCommand(f"Not a client command: '{commandname}'")
-        method = self.metacommands[commandname].method
-        ret = await method(*args, **kwargs)
+        meta = self.metacommands[commandname]
+        method = meta.method
+        if meta.flag_awaitable:
+            ret = await method(*args, **kwargs)
+        else:
+            ret = method(*args, **kwargs)
         return ret
 
     async def __execute_client_special(self, statementdata):
@@ -240,6 +244,7 @@ class Client(sl.WithCommands):
         return ret
 
     def __close(self):
+        self.logger.debug(f"Clooooooooooooooooooooooooooooooooooosando {self.__class__.__name__}")
         if self.__socket is not None:
             self.__del_socket()
             self.__ctx.destroy()
@@ -317,7 +322,7 @@ class Retry(Exception):
 
 
 _powertabulatemap = [
-    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "nexttime", "whenthisenter", "whenthisexit"),
+    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
      "converter": lambda x: a107.dt2str(a107.to_datetime(x)),},
      # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
     {"fieldnames": ("period",),
