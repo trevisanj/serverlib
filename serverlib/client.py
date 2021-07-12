@@ -23,10 +23,6 @@ CST_INITEDCMD = 20  # inited commands
 CST_LOOP = 30       # looping in command-line interface
 CST_STOPPED = 40    # stopped
 
-POSTHELP = """In addition, output can be directed to a file by using the always-available argument syntax:
-
-   >>>filename
-"""
 
 class Client(sl.WithCommands):
     """Client class."""
