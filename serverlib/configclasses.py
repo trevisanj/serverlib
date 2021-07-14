@@ -1,6 +1,6 @@
 """BaseConfig class"""
 
-__all__ = ["BaseConfig", "ServerConfig", "ClientConfig"]
+__all__ = ["BaseConfig", "ServerConfig", "ClientConfig", "ConsoleConfig"]
 
 import os, a107, configobj, serverlib as sl
 
@@ -11,33 +11,33 @@ class BaseConfig:
     properties.
 
     Args:
-        applicationname: "umbrella" name affecting self.autodir=="~/.<applicationname>"
+        appname: "umbrella" name affecting self.autodir=="~/.<appname>"
         datadir: data directory. If undefined, falls back to self.autodir
-        prefix: "sub-applicationname". If undefined, falls back to applicationname. Affects all properties "<*>path".
-                Use for complex-structured applications with several servers. Otherwise, use applicationname and
+        subappname: "sub-appname". If undefined, falls back to appname. Affects all properties "<*>path".
+                Use for complex-structured applications with several servers. Otherwise, use appname and
                 leave this.
     """
-    defaulthost = None
+
     defaultsuffix = None
     default_flag_log_file = None
 
     @property
     def autodir(self):
-        """Automatic directory made from self.applicationname."""
-        return os.path.expanduser(f"~/.{self.applicationname}")
+        """Automatic directory made from self.appname."""
+        return os.path.expanduser(f"~/.{self.appname}")
 
     @property
-    def prefix(self):
-        """Prefix for filenames. Defaults to self.applicationname."""
-        return self.__prefix if self.__prefix is not None else self.applicationname
+    def subappname(self):
+        """Defaults to self.appname."""
+        return self.__subappname if self.__subappname is not None else self.appname
 
-    @prefix.setter
-    def prefix(self, value):
-        self.__prefix = value
+    @subappname.setter
+    def subappname(self, value):
+        self.__subappname = value
 
     @property
     def suffix(self):
-        """Suffix for filenames. Defaults to self.defaultprefix."""
+        """Suffix for filenames. Defaults to self.defaultsubappname."""
         return self.__suffix if self.__suffix is not None else self.defaultsuffix
 
     @suffix.setter
@@ -59,22 +59,18 @@ class BaseConfig:
     @property
     def configpath(self):
         location = self.configdir
-        filename = f"{self.prefix}-{self.defaultsuffix}.cfg"
+        filename = f"{self.subappname}-{self.suffix}.cfg"
         configpath = os.path.join(location, "cfg", filename)
         return configpath
 
     @property
     def logpath(self):
         """Returns the path to the '.log' file."""
-        return os.path.join(self.datadir, "log", f"{self.prefix}-{self.defaultsuffix}.log")
-
-    @property
-    def url(self):
-        return sl.hopo2url((self.host, self.port), self.defaulthost)
+        return os.path.join(self.datadir, "log", f"{self.subappname}-{self.suffix}.log")
 
     @property
     def stoppath(self):
-        return os.path.join(self.datadir, f"stop-{self.prefix}")
+        return os.path.join(self.datadir, f"stop-{self.subappname}")
 
     @property
     def logger(self):
@@ -84,21 +80,19 @@ class BaseConfig:
                                            level=self.logginglevel)
         return self.__logger
 
+
     def __init__(self,
-                 applicationname=None,
+                 appname,
                  configdir=None,
                  flag_log_file=None,
                  flag_log_console=None,
                  datadir=None,
-                 host=None,
-                 port=None,
                  logginglevel=None,
-                 prefix=None,
+                 subappname=None,
                  suffix=None,
                  description=None,
                  reportdir=None):
-        assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.suffix"
-        assert self.defaulthost is not None, f"Forgot to set {self.__class__.__name__}.defaulthost"
+        assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.defaultsuffix"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
         if logginglevel is None: logginglevel = a107.logging_level
         if flag_log_console is None: flag_log_console = a107.flag_log_console
@@ -108,14 +102,12 @@ class BaseConfig:
         self.__reportdir = reportdir
         self.__logger = None
         self.master = None  # Server or Client
-        self.applicationname = applicationname
+        self.appname = appname
         self.flag_log_console = flag_log_console
         self.flag_log_file = flag_log_file if flag_log_file is not None else self.default_flag_log_file
-        self.host = host
-        self.port = port
         self.logginglevel = logginglevel
         self.description = description
-        self.__prefix = prefix
+        self.__subappname = subappname
         self.__suffix = suffix
 
     def __str__(self):
@@ -152,17 +144,30 @@ class BaseConfig:
         h.write()
 
     def filepath(self, suffix):
-        """Builds path to file <datadir>/<prefix><suffix>.
+        """Builds path to file <datadir>/<subappname><suffix>.
 
         Example of suffix: "-vars.pickle"
         """
-        return os.path.join(self.datadir, f"{self.prefix}{suffix}")
+        return os.path.join(self.datadir, f"{self.subappname}{suffix}")
 
     def __get_configobj(self):
         return configobj.ConfigObj(self.configpath, create_empty=True, unrepr=True)
 
 
-class ServerConfig(BaseConfig):
+class ClientServerConfig(BaseConfig):
+    defaulthost = None
+
+    @property
+    def url(self):
+        return sl.hopo2url((self.host, self.port), self.defaulthost)
+
+    def __init__(self, *args, host=None, port=None, **kwargs):
+        assert self.defaulthost is not None, f"Forgot to set {self.__class__.__name__}.defaulthost"
+        super().__init__(*args, **kwargs)
+        self.host = host
+        self.port = port
+
+class ServerConfig(ClientServerConfig):
     """Configuration for servers
 
     Args:
@@ -177,15 +182,31 @@ class ServerConfig(BaseConfig):
         super().__init__(*args, **kwargs)
         self.sleepinterval = sleepinterval
 
+class _WithHistory:
+    def __init__(self):
+        raise RuntimeError("How dare you, you SOAB (*@*!@@!@!(*&#!((")
+    @property
+    def historypath(self):
+        """Returns the path to the history file."""
+        return os.path.join(self.datadir, "history", f"{self.subappname}-{self.suffix}.history")
 
-class ClientConfig(BaseConfig):
-    """Configuration for clients."""
+
+class ClientConfig(ClientServerConfig, _WithHistory):
+    """Configuration for clients.
+
+    Introduces the concept of "own identity", which is necessary, as the client may assume the subappname and description of
+    the server, or use own subappname and description.
+    """
 
     defaultsuffix = "client"
     defaulthost = "127.0.0.1"
     default_flag_log_file = False
 
-    @property
-    def historypath(self):
-        """Returns the path to the history file."""
-        return os.path.join(self.datadir, "history", f"{self.prefix}-{self.defaultsuffix}.history")
+    def __init__(self, *args, flag_ownidentity=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.flag_ownidentity = flag_ownidentity
+
+
+class ConsoleConfig(BaseConfig, _WithHistory):
+    defaultsuffix = "console"
+    default_flag_log_file = False

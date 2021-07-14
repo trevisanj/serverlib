@@ -70,10 +70,13 @@ class WithClosers:
     async def _on_close(self):
         pass
 
+    async def _do_close(self):
+        pass
+
     # INTERFACE
 
     async def close(self):
         assert not self.__flag_called_close, f"{self.__class__.__name__}.close() has already been called"
         self.logger.debug(f"Clooooooooooooooooooooooooooooooooooosando {self.__class__.__name__}")
-        await asyncio.gather(*[closer.close() for closer in self.__closers], self._on_close())
+        await asyncio.gather(*[closer.close() for closer in self.__closers], self._on_close(), self._do_close())
         self.__flag_called_close = True

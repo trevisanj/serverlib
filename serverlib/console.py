@@ -1,0 +1,241 @@
+import atexit, sys, signal, readline, tabulate, a107, time, serverlib as sl, os, textwrap, re, pl3, random
+from colored import fg, bg, attr
+from contextlib import redirect_stdout
+from serverlib.consts import *
+
+__all__ = ["Console"]
+
+tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
+
+TIMEOUT = 30000  # miliseconds to wait until server replies
+
+# BaseConsole states
+CST_INIT = 0  # still in __init__()
+CST_ALIVE = 10  # passed __init__()
+CST_INITIALIZED = 20  # inited commands
+CST_LOOP = 30  # looping in command-line interface
+CST_STOPPED = 40  # stopped
+CST_CLOSED = 50
+
+KEBABWIDTH = 100
+
+class Console(sl.WithCommands, sl.WithClosers):
+    """BaseConsole class."""
+
+    @property
+    def state(self):
+        return self.__state
+
+    @property
+    def logger(self):
+        return self.cfg.logger
+
+    def __init__(self, cfg, cmd=None):
+        sl.WithCommands.__init__(self)
+        sl.WithClosers.__init__(self)
+        self.__state = CST_INIT
+        self.cfg = cfg
+        self.flag_needs_to_reset_colors = False
+        self._attach_cmd(_EssentialConsoleCommands())
+        if cmd is not None: self._attach_cmd(cmd)
+        self.__ctx, self.__socket = None, None
+        self.__outputfilename = None
+        self.__state = CST_ALIVE
+
+    # DATA MODEL
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, type_, value, traceback):
+        if self.__state < CST_CLOSED:
+            await self.close()
+
+    # INTERFACE
+
+    async def execute(self, statement, *args, **kwargs):
+        """Executes statemen; tries special, then client-side, then server-side."""
+        await self._assure_initialized()
+        statementdata = self._parse_statement(statement, *args, **kwargs)
+        return await self._do_execute(statementdata)
+
+    async def run(self):
+        """Will run client and automatically exit the program. Intercepts Ctrl+C and Ctrl+Z."""
+        await self._assure_initialized()
+        self.__intercept_exit()
+        self.__set_historylength()
+        print(await self._get_welcome())
+        prompt = await self._get_prompt()
+        self.__state = CST_LOOP
+        try:
+            while True:
+                self.flag_needs_to_reset_colors = True
+                st = input("{}{}{}>".format(COLOR_INPUT, attr("bold"), prompt))
+                print(attr("reset"), end="")
+                self.flag_needs_to_reset_colors = False
+
+                if not st:
+                    pass
+                elif st == "exit":
+                    break
+                else:
+                    await self.__execute_in_loop(st)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.__state = CST_STOPPED
+            await self.close()
+
+    async def help(self, commandname=None, *args, **kwargs):
+        if not commandname: return await self._do_help()
+        else: return await self._do_help_what(commandname)
+
+    async def close(self):
+        await sl.WithClosers.close(self)
+        self.__state = CST_CLOSED
+
+    # OVERRIDABLE
+
+    async def _on_initialize(self):
+        pass
+    
+    async def _do_execute(self, statementdata):
+        return await self.__execute_client(statementdata)
+
+    async def _get_prompt(self):
+        return self.cfg.subappname
+
+    async def _get_welcome(self):
+        slugtitle = f"Welcome to the '{self.cfg.subappname}' {self.cfg.suffix}"
+        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
+        if self.cfg.description:
+            ret += "\n"+a107.kebab(self.cfg.description, KEBABWIDTH)
+        return ret
+
+    async def _do_help(self):
+        cfg = self.cfg
+        helpdata = sl.make_helpdata(title=cfg.subappname,
+                                    description=cfg.description,
+                                    cmd=self.cmd, flag_protected=True)
+        specialgroup = sl.HelpGroup(title="Console specials", items=[
+            sl.HelpItem("?", "alias for 'help'"),
+            sl.HelpItem("exit", "exit console"),
+            sl.HelpItem("... >>>filename", "redirects output to file"), ])
+        helpdata.groups = [specialgroup]+helpdata.groups
+        text = sl.make_text(helpdata)
+        return text
+
+    async def _do_help_what(self, commandname):
+        if commandname in self.metacommands:
+            return sl.format_method(self.metacommands[commandname].method)
+        raise sl.NotAClientCommand(f"Not a client command: '{commandname}'")
+
+    # PROTECTED (NOT OVERRIDABLE)
+
+    def _parse_statement(self, statement, *args, **kwargs):
+        commandname, args, kwargs, self.__outputfilename = sl.parse_statement(statement, *args, **kwargs)
+        if commandname == "?":
+            commandname = "help"
+        return commandname, args, kwargs
+
+    async def _assure_initialized(self):
+        if self.__state < CST_INITIALIZED:
+            await self._initialize_cmd()
+            await self._on_initialize()
+            self.__state = CST_INITIALIZED
+
+    # PRIVATE
+
+    async def __execute_client(self, statementdata):
+        commandname, args, kwargs = statementdata
+        if not commandname in self.metacommands: raise sl.NotAClientCommand(f"Not a client command: '{commandname}'")
+        meta = self.metacommands[commandname]
+        method = meta.method
+        if meta.flag_awaitable:
+            ret = await method(*args, **kwargs)
+        else:
+            ret = method(*args, **kwargs)
+        return ret
+
+    async def __execute_in_loop(self, st):
+        """Executes and prints result."""
+        try:
+            ret = await self.execute(st)
+        except sl.StatementError as e:
+            # Here we treat specific exceptions raised by the server
+            yoda("Try not -- do it you must.", False)
+            my_print_exception(e)
+        except Exception as e:
+            yoda("Try not -- do it you must.", False)
+            my_print_exception(e)
+            if hasattr(e, "from_server"):
+                pass
+            else:
+                a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
+        else:
+            self.__print_result(ret)
+
+    def __intercept_exit(self):
+        # This one gets called at Ctrl+C, but ...
+        def _atexit():
+            a107.ensure_path(os.path.split(self.cfg.historypath)[0])
+            readline.write_history_file(self.cfg.historypath)
+            # await self.close()
+            if self.flag_needs_to_reset_colors:
+                for t, letter in zip((.2, .07, .07, .1), "exit"):
+                    print(letter, end="")
+                    sys.stdout.flush()
+                    time.sleep(t)
+                print(attr("reset"))
+
+        # ... we need this to handle the Ctrl+Z.
+        def _ctrl_z_handler(signum, frame):
+            # this will trigger _atexit()
+            sys.exit()
+
+        atexit.register(_atexit)
+        signal.signal(signal.SIGTSTP, _ctrl_z_handler)
+
+    def __set_historylength(self):
+        """Sets history length. default history len is -1 (infinite), which may grow unruly."""
+        try:
+            readline.read_history_file(self.cfg.historypath)
+        except FileNotFoundError:
+            pass
+        else:
+            readline.set_history_length(1000)
+
+    def __print_result(self, ret):
+        def do_print(flag_colors):
+            sl.print_result(ret, self.logger, flag_colors)
+
+        if self.__outputfilename:
+            yoda(f"To file '{self.__outputfilename}' output written will be.", True)
+            with open(self.__outputfilename, 'w') as f:
+                with redirect_stdout(f):
+                    do_print(False)
+        else:
+            yoda("Strong in you the force is.", True)
+            do_print(True)
+
+
+def yoda(s, happy=True):
+    if s.endswith("."): s = s[:-1]+" ·"  # Yoda levitates the period
+    print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")
+    print("{0}|o_o|{0} -- {1}".format("^" if happy else "v", s), end="")  # ◐◑
+    print(attr("reset")*2)
+
+
+def my_print_exception(e):
+    parts = []
+    if hasattr(e, "from_server"): parts.append(f'{COLOR_FROM_SERVER}(Error from server){attr("reset")}')
+    parts.append(f'{COLOR_ERROR}{attr("bold")}{e.__class__.__name__}:{attr("reset")}')
+    parts.append(f'{COLOR_ERROR}{str(e)}{attr("reset")}')
+    print(" ".join(parts))
+
+
+
+class _EssentialConsoleCommands(sl.ConsoleCommands):
+    async def help(self, what=None):
+        """Gets general help or help on specific command."""
+        return await self.master.help(what)

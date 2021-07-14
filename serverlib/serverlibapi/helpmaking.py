@@ -18,7 +18,8 @@ STYLE_NAME = attr("bold")+fg("light_gray")  # method name
 class HelpItem:
     name: str
     oneliner: str
-    # metacommand: MetaCommand = None
+    signature: inspect.Signature = None
+    docstring: str = None
 
 
 @dataclass
@@ -37,17 +38,20 @@ class HelpData:
     groups: List[HelpGroup]
 
 
-def make_groups(cmd, flag_protected=True):
+def make_groups(cmd, flag_protected=True, flag_docstrings=False):
     groups = []
     for commands in cmd.values():
         items = []
         meta = commands.get_meta(flag_protected)
         for metacommand in meta:
-            items.append(HelpItem(metacommand.name, metacommand.oneliner))
+            items.append(HelpItem(metacommand.name,
+                                  metacommand.oneliner,
+                                  inspect.signature(metacommand.method),
+                                  docstring=None if not flag_docstrings else metacommand.method.__doc__))
         groups.append(HelpGroup(commands.title, items))
     return groups
 
-def make_helpdata(title, description, cmd, flag_protected):
+def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False):
     """Assembles HelpData object from Server or Client instance.
 
     Args:
@@ -55,11 +59,12 @@ def make_helpdata(title, description, cmd, flag_protected):
         description: help description
         cmd: {name: Commands, ...}  (name not used)
         flag_protected: whether to include protected methods in help
+        flag_docstrings: whether to include docstrings in help data
 
     Returns: a HelpData instance
 
     """
-    groups = make_groups(cmd, flag_protected)
+    groups = make_groups(cmd, flag_protected, flag_docstrings)
     ret = HelpData(title, description, groups)
     return ret
 

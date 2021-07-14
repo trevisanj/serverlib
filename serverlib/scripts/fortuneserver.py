@@ -49,7 +49,7 @@ def main(args):
     cfg.host = args.host
     cfg.port = args.port
     cfg.flag_log_console = True
-    cfg.applicationname = "fortune"
+    cfg.appname = "fortune"
     cfg.description = __doc__
     server = serverlib.Server(cfg, cmd=FortuneCommands())
     asyncio.run(server.run())

@@ -51,7 +51,7 @@ def main(args):
     cfg.host = args.host
     cfg.port = args.port
     cfg.flag_log_console = True
-    cfg.applicationname = "sleeper"
+    cfg.appname = "sleeper"
     cfg.description = __doc__
     server = serverlib.Server(cfg, cmd=SleeperCommands())
     asyncio.run(server.run())

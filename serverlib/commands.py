@@ -1,28 +1,9 @@
-__all__ = ["Commands", "ServerCommands", "ClientCommands"]
+__all__ = ["Commands", "ServerCommands", "ClientCommands", "ConsoleCommands"]
 
 import serverlib as sl, inspect
 
 class Commands(sl.Intelligence):
-
     """Base class for ServerCommands and ClientCommands."""
-    #
-    # __init__() takes no arguments (self.master will be assigned later when command is attached to server).
-    # """
-    # def __init__(self):
-    #         super().__init__(None)
-
-    # def get_meta(self, flag_protected=True):
-    #     """Returns list of MetaCommand objects filtered according to rules."""
-    #     return [sl.MetaCommand(method) for method in self.get_methods(flag_protected)]
-    #
-    # def get_methods(self, flag_protected=False):
-    #     """Return list of methods according to filter rules."""
-    #     return [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
-    #             if "__" not in x[0]
-    #                and not x[0].startswith(("_on_", "_append_closer"))
-    #                and (flag_protected or not x[0].startswith("_"))
-    #                and x[0] not in ("initialize", "close",)]
-
 
 
 class ServerCommands(Commands):
@@ -31,3 +12,9 @@ class ServerCommands(Commands):
 
 class ClientCommands(Commands):
     pass
+
+
+class ConsoleCommands(Commands):
+    pass
+
+

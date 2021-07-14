@@ -1,28 +1,9 @@
-import serverlib as sl, asyncio
 __all__ = ["BasicServerCommands"]
+
+import serverlib as sl, asyncio
 
 
 class BasicServerCommands(sl.ServerCommands):
-    async def _help(self, what=None):
-        """Gets summary of available server commands or help on specific command.
-
-        This command was made protected to make the point that "?" is the preferred way to get help at the client side.
-        """
-        if what is None:
-            cfg = self.master.cfg
-            # text = sl.make_help(title=cfg.prefix,
-            #                     description=cfg.description,
-            #                     cmd=self.master.cmd, flag_protected=True)
-            # return text
-            helpdata = sl.make_helpdata(title=cfg.prefix,
-                                        description=cfg.description,
-                                        cmd=self.master.cmd, flag_protected=True)
-            return helpdata
-        else:
-            if what not in self.master.metacommands:
-                raise ValueError("Invalid method: '{}'".format(what))
-            return sl.format_method(self.master.metacommands[what].method)
-
     async def ping(self):
         """Returns "pong"."""
         return "pong"

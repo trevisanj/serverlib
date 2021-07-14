@@ -2,7 +2,7 @@
 import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random
 from colored import fg, bg, attr
 from .basicservercommands import *
-__all__ = ["Server", "CommandError", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
+__all__ = ["Server", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
 
 # Server states
@@ -143,7 +143,7 @@ class Server(sl.WithCommands):
 
         self.__lo_ops = {attrname: create_task(attrname) for attrname in attrnames}
         results = await asyncio.gather(*self.__lo_ops.values(), return_exceptions=True)
-        self.logger.debug(f"*** Server {self.cfg.prefix} -- how the story ended: ***")
+        self.logger.debug(f"*** Server {self.cfg.subappname} -- how the story ended: ***")
         for name, result in zip(attrnames, results):
             if isinstance(result, BaseException): result = a107.str_exc(result)
             self.logger.debug(f"{name}(): {result}")
@@ -172,7 +172,7 @@ class Server(sl.WithCommands):
             return ret
 
         def parse_statement(st):
-            """bytes --> (commandname, has_data, data, command, exception) (str, bool, bytes, callable, CommandError/None)."""
+            """bytes --> (commandname, has_data, data, command, exception) (str, bool, bytes, callable, StatementError/None)."""
             bdata, data, command, exception = b"", [], None, None
             # Splits statement
             try: idx = st.index(b" ")
@@ -184,15 +184,15 @@ class Server(sl.WithCommands):
             except KeyError:
                 message = f"Command is non-existing: '{commandname}'"
                 self.logger.info(message)
-                exception = CommandError(message)
+                exception = sl.StatementError(message)
             else: self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
             # Processes data
             if command:
                 data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
                 if not isinstance(data, list):
-                    exception = CommandError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
+                    exception = sl.StatementError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
                 elif len(data) != 2 or type(data[0]) not in (list, tuple) or type(data[1]) != dict:
-                    exception = CommandError("Data must unpickle to a structure like this: [[...], {...}]")
+                    exception = sl.StatementError("Data must unpickle to a structure like this: [[...], {...}]")
             return commandname, has_data, data, command, exception
 
         async def recv_send():
@@ -218,7 +218,7 @@ class Server(sl.WithCommands):
         a107.ensure_path(self.cfg.datadir)
         ctx = zmq.asyncio.Context()
         sck_rep = ctx.socket(zmq.REP)
-        logmsg = f"Binding ``{self.cfg.prefix}'' (REP) to {self.cfg.url} ..."
+        logmsg = f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} ..."
         self.cfg.logger.info(logmsg)
         if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
         sck_rep.bind(self.cfg.url)
@@ -236,7 +236,7 @@ class Server(sl.WithCommands):
         except asyncio.CancelledError: raise
         except KeyboardInterrupt: return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
         except:
-            self.cfg.logger.exception(f"Server '{self.cfg.prefix}' ☠C☠R☠A☠S☠H☠E☠D☠")
+            self.cfg.logger.exception(f"Server '{self.cfg.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
             raise
         finally:
             self.__state = ST_STOPPED
@@ -246,10 +246,6 @@ class Server(sl.WithCommands):
             sck_rep.close()
             ctx.destroy()
             await self._on_destroy()
-
-
-class CommandError(Exception):
-    pass
 
 
 class _Sleeper:
@@ -262,18 +258,41 @@ class _Sleeper:
 
 class _EssentialServerCommands(sl.ServerCommands):
     async def _get_welcome(self):
-        return "\n".join(a107.format_slug(f"Welcome to the '{self.master.cfg.prefix}' server", random.randint(0, 2)))
+        return "\n".join(a107.format_slug(f"Welcome to the '{self.master.cfg.subappname}' server", random.randint(0, 2)))
 
     async def _get_name(self):
         """Returns the server application name."""
-        return self.cfg.applicationname
+        return self.cfg.appname
 
-    async def _get_prefix(self):
-        """Returns the server prefix."""
-        return self.cfg.prefix
+    async def _get_subappname(self):
+        """Returns the server subappname."""
+        return self.cfg.subappname
+
+    async def _get_prompt(self):
+        """Returns what the server thinks that should be the client prompt."""
+        return self.cfg.subappname
 
     async def _poke(self):
-        """Prints and returns the server prefix (useful to identify what is running in a terminal)."""
-        # print(f"👉 {self.cfg.prefix}")  # 👈")
-        print(f"{fg('white')}{attr('bold')}{self.cfg.prefix}{attr('reset')} 👈")
-        return self.cfg.prefix
+        """Prints and returns the server subappname (useful to identify what is running in a terminal)."""
+        # print(f"👉 {self.cfg.subappname}")  # 👈")
+        print(f"{fg('white')}{attr('bold')}{self.cfg.subappname}{attr('reset')} 👈")
+        return self.cfg.subappname
+
+    async def _help(self, what=None, flag_docstrings=False):
+        """Gets summary of available server commands or help on specific command.
+
+        Args:
+            what: specific command
+            flag_docstrings: whether to include docstrings in help data
+        """
+        if what is None:
+            cfg = self.master.cfg
+            helpdata = sl.make_helpdata(title=cfg.subappname,
+                                        description=cfg.description,
+                                        cmd=self.master.cmd, flag_protected=True, flag_docstrings=flag_docstrings)
+            return helpdata
+        else:
+            if what not in self.master.metacommands:
+                raise ValueError("Invalid method: '{}'".format(what))
+            return sl.format_method(self.master.metacommands[what].method)
+
