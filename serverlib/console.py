@@ -42,6 +42,8 @@ class Console(sl.WithCommands, sl.WithClosers):
         self.__outputfilename = None
         self.__state = CST_ALIVE
 
+        self.name = a107.random_name()
+
     # DATA MODEL
 
     async def __aenter__(self):

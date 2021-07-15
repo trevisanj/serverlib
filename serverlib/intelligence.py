@@ -49,6 +49,9 @@ class Intelligence(sl.WithClosers):
         self.__logger = None
         self.__cfg = cfg
 
+        self.name = a107.random_name()
+        print(f"AND A NEW INTELLIGENCE IS BORN: {self.name} ({self.__class__.__name__})--------------------------------------")
+
     # INTERFACE
 
     def get_meta(self, flag_protected=True):

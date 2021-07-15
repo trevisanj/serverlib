@@ -128,7 +128,7 @@ class Client(sl.Console):
         self.__socket = self.__ctx.socket(zmq.REQ)
         self.__socket.setsockopt(zmq.SNDTIMEO, TIMEOUT)
         self.__socket.setsockopt(zmq.RCVTIMEO, TIMEOUT)
-        print(f"Connecting ``{self.cfg.subappname}(client)'' to {self.cfg.url} ...")
+        print(f"Connecting {self.name}, ``{self.cfg.subappname}(client)'', to {self.cfg.url} ...")
         self.__socket.connect(self.cfg.url)
 
     def __make_context(self):
