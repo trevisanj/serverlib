@@ -216,7 +216,9 @@ class Server(sl.WithCommands, sl.WithClosers):
         self.cfg.read_configfile()
         a107.ensure_path(self.cfg.datadir)
         ctx = zmq.asyncio.Context()
+        sl.lowstate.numcontexts += 1
         sck_rep = ctx.socket(zmq.REP)
+        sl.lowstate.numsockets += 1
         logmsg = f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} ..."
         self.cfg.logger.info(logmsg)
         if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
@@ -243,7 +245,9 @@ class Server(sl.WithCommands, sl.WithClosers):
             await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
             await self.close()
             sck_rep.close()
+            sl.lowstate.numsockets -= 1
             ctx.destroy()
+            sl.lowstate.numcontexts -= 1
 
 
 class _Sleeper:

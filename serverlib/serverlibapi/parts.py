@@ -1,6 +1,6 @@
 __all__ = ["WithCommands", "WithClosers"]
 
-import serverlib as sl, asyncio
+import serverlib as sl, asyncio, inspect
 
 class WithCommands:
     """This class enters as an ancestor for the Client and Server class in a multiple-inheritance composition."""
@@ -63,10 +63,28 @@ class WithClosers:
                 self.__closers.append(closer)
                 ret.append(closer)
         assert len(ret) > 0, f"Nothing was passed to {self.__class__.__name__}._append_closers()"
+
+        if len(ret) == 1: return ret[0]
+        return ret
+
+    async def _aappend_closers(self, *args, flag_initialize=True):
+        """Async version of _append_closers() with automatic initialization option."""
+        ret = []
+        for closers in args:
+            if not isinstance(closers, (list, tuple)): closers = [closers]
+            for closer in closers:
+                self.__closers.append(closer)
+                ret.append(closer)
+        assert len(ret) > 0, f"Nothing was passed to {self.__class__.__name__}._append_closers()"
+
+        if flag_initialize:
+            await asyncio.gather(*[closer.initialize() for closer in ret if hasattr(closer, "initialize")])
+
         if len(ret) == 1: return ret[0]
         return ret
 
     _append_closer = _append_closers
+    _aappend_closer = _aappend_closers
 
     # INHERITABLES
 
@@ -79,7 +97,19 @@ class WithClosers:
     # INTERFACE
 
     async def close(self):
+        """Calls self._on_close() and self._do_close() first; then calls closers' close()."""
         assert not self.__flag_called_close, f"{self.__class__.__name__}.close() has already been called"
         self.logger.debug(f"Clooooooooooooooooooooooooooooooooooosando {self.__class__.__name__}")
-        await asyncio.gather(*[closer.close() for closer in self.__closers], self._on_close(), self._do_close())
+
+        await asyncio.gather(self._on_close(), self._do_close())
+
+        # Separates awaitables and non-awaitables
+        awaitables = []
+        for closer in self.__closers:
+            method = closer.close
+            if not inspect.iscoroutinefunction(method):
+                method()
+            else:
+                awaitables.append(method())
+        await asyncio.gather(*awaitables)
         self.__flag_called_close = True

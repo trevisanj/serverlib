@@ -22,7 +22,9 @@ class Publisher(sl.Intelligence):
 
     async def _on_initialize(self):
         self.context = zmq.asyncio.Context()
+        sl.lowstate.numcontexts += 1
         self.socket = self.context.socket(zmq.PUB)
+        sl.lowstate.numsockets += 1
         url = sl.hopo2url(self.hopo, "*")
         logmsg = f"Binding socket (PUB) to {url} ..."
         self.logger.info(logmsg)
@@ -33,7 +35,9 @@ class Publisher(sl.Intelligence):
     async def _on_close(self):
         self.logger.debug("Closing PUB server <<<<<<<<<<<<<<<<<<")
         self.socket.close()
+        sl.lowstate.numsockets -= 1
         self.context.destroy()
+        sl.lowstate.numcontexts -= 1
 
     async def publish(self, msg):
         assert isinstance(msg, bytes), "Message must be bytes here"

@@ -28,15 +28,15 @@ class Client(sl.Console):
     async def execute_client(self, statement, *args, **kwargs):
         """Executes statement; tries special, then client-side."""
         await self._assure_initialized()
-        statementdata = self._parse_statement(statement, *args, **kwargs)
-        return await sl.Console._do_execute(self, statementdata)
+        self._parse_statement(statement, args, kwargs)
+        return await sl.Console._do_execute(self)
 
     async def execute_server(self, statement, *args, **kwargs):
         """Executes statement directly on the server."""
         assert isinstance(statement, str)
         await self._assure_initialized()
-        statementdata = self._parse_statement(statement, *args, **kwargs)
-        return await self.__execute_server(statementdata)
+        self._parse_statement(statement, args, kwargs)
+        return await self.__execute_server()
     
     async def execute_bytes(self, bst):
         """Sents statement to server, receives reply, unpickles and returns.
@@ -85,16 +85,17 @@ class Client(sl.Console):
         if self.__socket is not None:
             self.__del_socket()
             self.__ctx.destroy()
+            sl.lowstate.numcontexts -= 1
 
-    async def _do_execute(self, statementdata):
+    async def _do_execute(self):
         flag_try_server = False
         try:
-            ret = await super()._do_execute(statementdata)
+            ret = await super()._do_execute()
         except sl.NotAClientCommand:
             # Note: I don't want to raise another exception inside here; that's why I use this flag instead
             flag_try_server = True
         if flag_try_server:
-            ret = await self.__execute_server(statementdata)
+            ret = await self.__execute_server()
         return ret
 
     async def _do_help(self):
@@ -126,6 +127,7 @@ class Client(sl.Console):
     def __make_socket(self):
         self.__del_socket()
         self.__socket = self.__ctx.socket(zmq.REQ)
+        sl.lowstate.numsockets += 1
         self.__socket.setsockopt(zmq.SNDTIMEO, TIMEOUT)
         self.__socket.setsockopt(zmq.RCVTIMEO, TIMEOUT)
         print(f"Connecting {self.name}, ``{self.cfg.subappname}(client)'', to {self.cfg.url} ...")
@@ -133,10 +135,11 @@ class Client(sl.Console):
 
     def __make_context(self):
         self.__ctx = zmq.asyncio.Context()
+        sl.lowstate.numcontexts += 1
 
-    async def __execute_server(self, statementdata):
-        commandname, args, kwargs = statementdata
-        bst = commandname.encode()+b" "+pickle.dumps([args, kwargs])
+    async def __execute_server(self):
+        data = self._statementdata
+        bst = data.commandname.encode()+b" "+pickle.dumps([data.args, data.kwargs])
         return await self.execute_bytes(bst)
 
     def __del_socket(self):
@@ -144,6 +147,7 @@ class Client(sl.Console):
             try:
                 self.__socket.setsockopt(zmq.LINGER, 0)
                 self.__socket.close()
+                sl.lowstate.numsockets -= 1
             except zmq.ZMQError as e:
                 raise
             self.__socket = None

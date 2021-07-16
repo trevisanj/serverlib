@@ -1,9 +1,10 @@
-import atexit, sys, signal, readline, tabulate, a107, time, serverlib as sl, os, textwrap, re, pl3, random
-from colored import fg, bg, attr
+__all__ = ["Console"]
+
+import atexit, sys, signal, readline, tabulate, a107, time, serverlib as sl, os
 from contextlib import redirect_stdout
 from serverlib.consts import *
+from colored import attr
 
-__all__ = ["Console"]
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
@@ -56,8 +57,8 @@ class Console(sl.WithCommands, sl.WithClosers):
     async def execute(self, statement, *args, **kwargs):
         """Executes statemen; tries special, then client-side, then server-side."""
         await self._assure_initialized()
-        statementdata = self._parse_statement(statement, *args, **kwargs)
-        return await self._do_execute(statementdata)
+        self._parse_statement(statement, args, kwargs)
+        return await self._do_execute()
 
     async def run(self):
         """Will run client and automatically exit the program. Intercepts Ctrl+C and Ctrl+Z."""
@@ -99,8 +100,8 @@ class Console(sl.WithCommands, sl.WithClosers):
     async def _on_initialize(self):
         pass
     
-    async def _do_execute(self, statementdata):
-        return await self.__execute_client(statementdata)
+    async def _do_execute(self):
+        return await self.__execute_console()
 
     async def _get_prompt(self):
         return self.cfg.subappname
@@ -128,11 +129,9 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     # PROTECTED (NOT OVERRIDABLE)
 
-    def _parse_statement(self, statement, *args, **kwargs):
-        commandname, args, kwargs, self.__outputfilename = sl.parse_statement(statement, *args, **kwargs)
-        if commandname == "?":
-            commandname = "help"
-        return commandname, args, kwargs
+    def _parse_statement(self, statement, args, kwargs):
+        self._statementdata = sl.parse_statement(statement, args, kwargs)
+        return self._statementdata
 
     async def _assure_initialized(self):
         if self.__state < CST_INITIALIZED:
@@ -142,15 +141,16 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     # PRIVATE
 
-    async def __execute_client(self, statementdata):
-        commandname, args, kwargs = statementdata
-        if not commandname in self.metacommands: raise sl.NotAClientCommand(f"Not a client command: '{commandname}'")
-        meta = self.metacommands[commandname]
+    async def __execute_console(self):        
+        data = self._statementdata
+        if not data.commandname in self.metacommands:
+            raise sl.NotAClientCommand(f"Not a client command: '{data.commandname}'")
+        meta = self.metacommands[data.commandname]
         method = meta.method
         if meta.flag_awaitable:
-            ret = await method(*args, **kwargs)
+            ret = await method(*data.args, **data.kwargs)
         else:
-            ret = method(*args, **kwargs)
+            ret = method(*data.args, **data.kwargs)
         return ret
 
     async def __execute_in_loop(self, st):
@@ -205,9 +205,10 @@ class Console(sl.WithCommands, sl.WithClosers):
         def do_print(flag_colors):
             sl.print_result(ret, self.logger, flag_colors)
 
-        if self.__outputfilename:
-            yoda(f"To file '{self.__outputfilename}' output written will be.", True)
-            with open(self.__outputfilename, 'w') as f:
+        outputfilename = self._statementdata.outputfilename
+        if outputfilename:
+            yoda(f"To file '{outputfilename}' output written will be.", True)
+            with open(outputfilename, 'w') as f:
                 with redirect_stdout(f):
                     do_print(False)
         else:
@@ -235,3 +236,6 @@ class _EssentialConsoleCommands(sl.ConsoleCommands):
     async def help(self, what=None):
         """Gets general help or help on specific command."""
         return await self.master.help(what)
+
+    async def getd_lowstate(self):
+        return sl.lowstate.__dict__
