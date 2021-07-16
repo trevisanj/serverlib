@@ -3,14 +3,11 @@ import serverlib, a107, argparse, asyncio
 __doc__ = "Fortune Client"
 
 def main(args):
-    cfg = serverlib.ClientConfig()
-    cfg.host = args.host
-    cfg.port = args.port
-    # cfg.appname = "fortune"
-    cfg.flag_log_file = True
-    cfg.flag_log_console = False
-    cfg.description = __doc__
-
+    cfg = serverlib.ClientConfig(appname="fortune",
+                                 host = args.host,
+                                 port = args.port,
+                                 flag_log_file=False,
+                                 flag_log_console=True)
     client = serverlib.Client(cfg)
     asyncio.run(client.run())
 

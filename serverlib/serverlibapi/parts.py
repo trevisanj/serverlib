@@ -44,6 +44,9 @@ class WithClosers:
     def _append_closers(self, *args):
         """Appends "closeable" objects for automatic and recursive close. Returns object or list of objects passed.
 
+        From the point of view of this class, _on_close() and _do_close() are indistinct. Both are called and in no
+        paticular order.
+
         Examples:
 
         Returns object passed as argument so that it can be assigned to a variable in the same line of code:

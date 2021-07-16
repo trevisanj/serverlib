@@ -9,5 +9,8 @@ COLOR_SAD = fg("blue")
 COLOR_INPUT = fg("orange_1")
 COLOR_HEADER = fg("white")
 
+KEBABWIDTH = 100
+
+
 del fg, bg, attr
 

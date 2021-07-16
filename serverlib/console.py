@@ -17,8 +17,6 @@ CST_LOOP = 30  # looping in command-line interface
 CST_STOPPED = 40  # stopped
 CST_CLOSED = 50
 
-KEBABWIDTH = 100
-
 class Console(sl.WithCommands, sl.WithClosers):
     """BaseConsole class."""
 
@@ -108,11 +106,7 @@ class Console(sl.WithCommands, sl.WithClosers):
         return self.cfg.subappname
 
     async def _get_welcome(self):
-        slugtitle = f"Welcome to the '{self.cfg.subappname}' {self.cfg.suffix}"
-        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
-        if self.cfg.description:
-            ret += "\n"+a107.kebab(self.cfg.description, KEBABWIDTH)
-        return ret
+        return self.cfg.get_welcome()
 
     async def _do_help(self):
         cfg = self.cfg

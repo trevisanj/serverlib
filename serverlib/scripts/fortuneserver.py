@@ -1,6 +1,6 @@
 #!/usr/bin/env python
+"""A fucked-up fortune teller with sentences based on my online therapy sessions at BetterHelp."""
 import serverlib, a107, argparse, random as ra, textwrap, asyncio
-__doc__ = """A fucked-up fortune teller with sentences based on my online therapy sessions at BetterHelp."""
 
 
 class FortuneCommands(serverlib.ServerCommands):
@@ -24,33 +24,12 @@ class FortuneCommands(serverlib.ServerCommands):
         super().__init__(*args, **kwargs)
 
 
-
-    # async def random(self):
-    #     return ra.random()
-
-    # random.__doc__ = ra.random.__doc__
-
-    # async def randint(self, a, b):
-    #     return ra.randint(int(a), int(b))
-
-    # randint.__doc__ = ra.randint.__doc__
-
-    # async def choice(self, *args):
-    #     """Returns one of the arguments passed randomly chosen."""
-    #     return ra.choice(args)
-
-    # async def random_name(self):
-    #     """Generates a random human name."""
-    #     return a107.random_name()
-
-
 def main(args):
-    cfg = serverlib.ServerConfig()
-    cfg.host = args.host
-    cfg.port = args.port
-    cfg.flag_log_console = True
-    cfg.appname = "fortune"
-    cfg.description = __doc__
+    cfg = serverlib.ServerConfig(appname="fortune",
+                                 host=args.host,
+                                 port=args.port,
+                                 flag_log_console=True,
+                                 description=__doc__)
     server = serverlib.Server(cfg, cmd=FortuneCommands())
     asyncio.run(server.run())
 

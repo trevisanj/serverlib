@@ -12,7 +12,7 @@ ST_LOOP = 30     # in main loop
 ST_STOPPED = 40  # stopped
 
 
-class Server(sl.WithCommands):
+class Server(sl.WithCommands, sl.WithClosers):
     """Server class.
 
     Args:
@@ -37,7 +37,8 @@ class Server(sl.WithCommands):
         return self.__lo_ops
 
     def __init__(self, cfg, cmd=None, flag_basiccommands=True):
-        super().__init__()
+        sl.WithCommands.__init__(self)
+        sl.WithClosers.__init__(self)
         self.__state = ST_INIT
         self.cfg = cfg
         cfg.master = self
@@ -52,9 +53,7 @@ class Server(sl.WithCommands):
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤
     # └─┘ └┘ └─┘┴└─┴└─┴─┴┘└─┘  ┴ ┴└─┘
 
-    async def _on_destroy(self): pass
-    async def _on_run(self): pass
-    async def _after_cycle(self): pass
+    async def _on_initialize(self): pass
 
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
     # │ │└─┐├┤   │││├┤
@@ -222,14 +221,13 @@ class Server(sl.WithCommands):
         self.cfg.logger.info(logmsg)
         if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
         sck_rep.bind(self.cfg.url)
-        await self._on_run()
         await self._initialize_cmd()
+        await self._on_initialize()
         # MAIN LOOP ...
         self.__state = ST_LOOP
         try:
             while True:
                 did_sth = await recv_send()
-                await self._after_cycle()
                 if not did_sth:
                     # Sleeps because tired of doing nothing
                     if self.cfg.sleepinterval > 0: await asyncio.sleep(self.cfg.sleepinterval)
@@ -242,10 +240,10 @@ class Server(sl.WithCommands):
             self.__state = ST_STOPPED
             self.cfg.logger.debug(f"😀 DON'T WORRY 😀 {self.__class__.__name__}.__serverloop() 'finally:'")
             self.wake_up()
-            await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops
+            await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
+            await self.close()
             sck_rep.close()
             ctx.destroy()
-            await self._on_destroy()
 
 
 class _Sleeper:
@@ -258,7 +256,7 @@ class _Sleeper:
 
 class _EssentialServerCommands(sl.ServerCommands):
     async def _get_welcome(self):
-        return "\n".join(a107.format_slug(f"Welcome to the '{self.master.cfg.subappname}' server", random.randint(0, 2)))
+        return self.master.cfg.get_welcome()
 
     async def _get_name(self):
         """Returns the server application name."""

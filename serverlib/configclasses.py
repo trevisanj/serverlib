@@ -2,7 +2,8 @@
 
 __all__ = ["BaseConfig", "ServerConfig", "ClientConfig", "ConsoleConfig"]
 
-import os, a107, configobj, serverlib as sl
+import os, a107, configobj, serverlib as sl, random
+from .consts import KEBABWIDTH
 
 class BaseConfig:
     """Common functionality for ClientConfig and ServerConfig.
@@ -153,6 +154,13 @@ class BaseConfig:
     def __get_configobj(self):
         return configobj.ConfigObj(self.configpath, create_empty=True, unrepr=True)
 
+    def get_welcome(self):
+        slugtitle = f"Welcome to the '{self.subappname}' {self.suffix}"
+        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
+        if self.description:
+            ret += "\n"+a107.kebab(self.description, KEBABWIDTH)
+        return ret
+
 
 class ClientServerConfig(BaseConfig):
     defaulthost = None
@@ -166,6 +174,7 @@ class ClientServerConfig(BaseConfig):
         super().__init__(*args, **kwargs)
         self.host = host
         self.port = port
+
 
 class ServerConfig(ClientServerConfig):
     """Configuration for servers
