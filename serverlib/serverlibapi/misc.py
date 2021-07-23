@@ -77,7 +77,6 @@ class StatementData:
     flag_server: bool
 
 
-
 def parse_statement(statement, args_, kwargs_):
     """Parses statement and returns StatementData"""
     statement = statement.lstrip()

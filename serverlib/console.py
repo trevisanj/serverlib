@@ -155,19 +155,18 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     async def __execute_in_loop(self, st):
         """Executes and prints result."""
+
+        def blueyoda(e):
+            yoda("Try not -- do it you must.", False)
+            my_print_exception(e)
         try:
             ret = await self.execute(st)
-        except sl.StatementError as e:
-            # Here we treat specific exceptions raised by the server
-            yoda("Try not -- do it you must.", False)
-            my_print_exception(e)
+        except (sl.StatementError, sl.NotAClientCommand) as e:
+            blueyoda(e)
         except Exception as e:
-            yoda("Try not -- do it you must.", False)
-            my_print_exception(e)
-            if hasattr(e, "from_server"):
-                pass
-            else:
-                a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
+            blueyoda(e)
+            if hasattr(e, "from_server"): pass
+            else: a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
         else:
             self.__print_result(ret)
 

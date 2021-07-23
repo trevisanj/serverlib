@@ -1,3 +1,8 @@
+"""Commands, ServerCommands, ClientCommands, ConsoleCommands
+
+These classes did something historically, but now they exist only for grouping purposes. It is nice to see how the
+"intelligence" concept took over."""
+
 __all__ = ["Commands", "ServerCommands", "ClientCommands", "ConsoleCommands"]
 
 import serverlib as sl, inspect

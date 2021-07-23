@@ -1,5 +1,3 @@
-"""MetaCommand and MetaCommands classes. They are useful both for utilization and stylization."""
-
 __all__ = ["MetaCommand"]
 
 import inspect, a107

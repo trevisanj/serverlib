@@ -1,8 +1,10 @@
 """Server, ServerCommands etc."""
+
+__all__ = ["Server", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
+
 import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random
 from colored import fg, bg, attr
 from .basicservercommands import *
-__all__ = ["Server", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
 
 # Server states
@@ -82,7 +84,7 @@ class Server(sl.WithCommands, sl.WithClosers):
         """Takes a nap that can be prematurely terminated with self.wake_up()."""
         my_debug = lambda s: self.logger.debug(f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
 
-        async def ensure_new_name():
+        async def ensure_new_name(name):
             i = 0
             while sleeper.name in self.__sleepers:
                 if name is not None:
@@ -95,7 +97,7 @@ class Server(sl.WithCommands, sl.WithClosers):
         if isinstance(waittime, sl.Retry): waittime = waittime.waittime
         interval = min(waittime, 0.1)
         sleeper = _Sleeper(waittime, name)
-        await ensure_new_name()
+        await ensure_new_name(name)
         self.__sleepers[sleeper.name] = sleeper
         slept = 0
         try:

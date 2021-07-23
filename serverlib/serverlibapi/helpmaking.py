@@ -14,6 +14,7 @@ STYLE_DESCRIPTION = fg("yellow")            # help description
 STYLE_GROUPTITLE = fg("light_yellow")       # group title
 STYLE_NAME = attr("bold")+fg("light_gray")  # method name
 
+
 @dataclass
 class HelpItem:
     name: str
@@ -50,6 +51,7 @@ def make_groups(cmd, flag_protected=True, flag_docstrings=False):
                                   docstring=None if not flag_docstrings else metacommand.method.__doc__))
         groups.append(HelpGroup(commands.title, items))
     return groups
+
 
 def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False):
     """Assembles HelpData object from Server or Client instance.

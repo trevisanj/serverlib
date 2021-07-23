@@ -1,5 +1,7 @@
-import argparse, serverlib as sl, asyncio, a107
 __all__ = ["cli_with_hopo"]
+
+import argparse, serverlib as sl, asyncio, a107
+
 def cli_with_hopo(config, clientcls=None):
     """Runs a client command-line interface (CLI) with --host and --port/-p arguments.
 

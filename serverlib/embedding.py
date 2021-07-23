@@ -1,6 +1,6 @@
 """Allows embedding an IPython inside the program as a working console or client.
 
-This code is based on a107.console and aims to extinguish it.
+This code is based on a107.console and replaces it.
 """
 
 __all__ = ["embed_ipython"]

@@ -52,6 +52,11 @@ class Intelligence(sl.WithClosers):
         self.name = a107.random_name()
         print(f"AND A NEW INTELLIGENCE IS BORN: {self.name} ({self.__class__.__name__})--------------------------------------")
 
+    # INHERITABLES
+
+    async def _on_initialize(self):
+        pass
+
     # INTERFACE
 
     def get_meta(self, flag_protected=True):
@@ -61,18 +66,12 @@ class Intelligence(sl.WithClosers):
     def get_methods(self, flag_protected=False):
         """Return list of methods according to filter rules."""
 
-        _superexcluded = ("initialize", "close", "get_methods", "get_meta")
+        _SUPEREXCLUDED = ("initialize", "close", "get_methods", "get_meta")
         return [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
                 if "__" not in x[0]
-                and not x[0].startswith(("_on_", "_do_", "_append_closer"))
+                and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer"))
                 and (flag_protected or not x[0].startswith("_"))
-                and x[0] not in _superexcluded and x[0] not in self._excluded]
+                and x[0] not in _SUPEREXCLUDED and x[0] not in self._excluded]
 
     async def initialize(self):
         await self._on_initialize()
-
-    # INHERITABLES
-
-    async def _on_initialize(self):
-        pass
-

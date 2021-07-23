@@ -81,7 +81,6 @@ class BaseConfig:
                                            level=self.logginglevel)
         return self.__logger
 
-
     def __init__(self,
                  appname,
                  configdir=None,
@@ -121,8 +120,6 @@ class BaseConfig:
         """This method populates self with attributes found within config file.
 
         Like this one can override hard-coded attributes.
-
-        If more complex structures are needed, one may consider using other types of storage within the config dir
         """
         configpath = self.configpath
         d, f = os.path.split(configpath)
@@ -151,9 +148,6 @@ class BaseConfig:
         """
         return os.path.join(self.datadir, f"{self.subappname}{suffix}")
 
-    def __get_configobj(self):
-        return configobj.ConfigObj(self.configpath, create_empty=True, unrepr=True)
-
     def get_welcome(self):
         slugtitle = f"Welcome to the '{self.subappname}' {self.suffix}"
         ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
@@ -161,8 +155,13 @@ class BaseConfig:
             ret += "\n"+a107.kebab(self.description, KEBABWIDTH)
         return ret
 
+    def __get_configobj(self):
+        return configobj.ConfigObj(self.configpath, create_empty=True, unrepr=True)
+
 
 class ClientServerConfig(BaseConfig):
+    """Base class for ClientConfig and ServerConfig."""
+
     defaulthost = None
 
     @property
@@ -191,9 +190,10 @@ class ServerConfig(ClientServerConfig):
         super().__init__(*args, **kwargs)
         self.sleepinterval = sleepinterval
 
+
 class _WithHistory:
-    def __init__(self):
-        raise RuntimeError("How dare you, you SOAB (*@*!@@!@!(*&#!((")
+    """This is a partial class for ClientConfig and ConsoleConfig."""
+
     @property
     def historypath(self):
         """Returns the path to the history file."""
@@ -203,7 +203,7 @@ class _WithHistory:
 class ClientConfig(ClientServerConfig, _WithHistory):
     """Configuration for clients.
 
-    Introduces the concept of "own identity", which is necessary, as the client may assume the subappname and description of
+    Introduces the concept of "own identity", as a client may assume the subappname and description of
     the server, or use own subappname and description.
     """
 

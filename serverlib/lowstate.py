@@ -1,4 +1,7 @@
-"""Low-level, application-level variables."""
+"""Low-level, application-level variables.
+
+This was created for debugging purposes and may  be accessed through
+"""
 
 __all__ = ["lowstate"]
 

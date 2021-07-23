@@ -1,6 +1,6 @@
 __all__ = ["WithCommands", "WithClosers"]
 
-import serverlib as sl, asyncio, inspect
+import serverlib as sl, asyncio, inspect, a107
 
 class WithCommands:
     """This class enters as an ancestor for the Client and Server class in a multiple-inheritance composition."""
@@ -18,7 +18,7 @@ class WithCommands:
         """Attaches one or more Commands instances.
 
         Args:
-            cmds: each element may be a Command or [Command0, Command1, ..]
+            cmds: each element may be a Commands or [Commands0, Commands1, ..]
 
         **Note** This method may be called from __init__().
         """
@@ -26,12 +26,15 @@ class WithCommands:
             if not isinstance(cmd, (list, tuple)): cmd = [cmd]
             for _ in cmd:
                 if not isinstance(_, sl.Intelligence):
-                    raise TypeError(f"Invalid commands type: {_.__class__.__name__}")
+                    raise TypeError(f"Invalid commands type: {_.__class__.__name__} (must be an Intelligence)")
             for _ in cmd:
                 _.master = self
                 self.cmd[_.title] = _
                 for metacommand in _.get_meta(flag_protected=True):
-                    self.metacommands[metacommand.name] = metacommand
+                    name = metacommand.name
+                    if name in self.metacommands:
+                        print(a107.format_warning(f"Repeated command: '{name}'"))  # TODO let's see, maybe we let commands override each other
+                    self.metacommands[name] = metacommand
 
 
 class WithClosers:
@@ -84,7 +87,9 @@ class WithClosers:
         return ret
 
     _append_closer = _append_closers
+    _append_closer.__name__ = "_append_closer"
     _aappend_closer = _aappend_closers
+    _append_closers.__name__ = "_append_closers"
 
     # INHERITABLES
 
