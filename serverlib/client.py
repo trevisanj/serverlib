@@ -118,7 +118,7 @@ class Client(sl.Console):
 
     async def _do_help_what(self, commandname):
         try:
-            await super()._do_help_what(commandname)
+            return await super()._do_help_what(commandname)
         except sl.NotAClientCommand:
             return await self.execute_server("_help", commandname)
 

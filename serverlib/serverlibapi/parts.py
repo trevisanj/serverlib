@@ -111,7 +111,14 @@ class WithClosers:
         # Separates awaitables and non-awaitables
         awaitables = []
         for closer in self.__closers:
-            method = closer.close
+            flag_has = True
+            try: method = closer.close
+            except AttributeError:
+                try: method = closer.Close
+                except AttributeError: flag_has = False
+            if not flag_has:
+                raise AttributeError(f"Class {closer.__class__.__name__} does not have close()/Close() method")
+
             if not inspect.iscoroutinefunction(method):
                 method()
             else:

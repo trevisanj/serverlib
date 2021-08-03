@@ -37,6 +37,7 @@ class Intelligence(sl.WithClosers):
     @property
     def server(self):
         if isinstance(self.master, sl.Server): return self.master
+        if hasattr(self.master, "server"): return self.master.server
         return None
         # elif isinstance(self.master, sl.Client): return None
         # if not hasattr(self.master, "server"):
