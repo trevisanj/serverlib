@@ -97,6 +97,9 @@ def print_result(ret, logger=None, flag_colors=True):
         text = sl.make_text(arg)
         print(text)
 
+    def handle_status(arg):
+        print(f"{COLOR_HEADER}Status:{RESET} {a107.fancilyquoted(arg.msg)}")
+
     def handle_default(arg):
         if not isinstance(arg, str): arg = str(arg)
         if "\n" in arg:
@@ -119,5 +122,7 @@ def print_result(ret, logger=None, flag_colors=True):
         handle_dict(ret)
     elif isinstance(ret, sl.HelpData):
         handle_helpdata(ret)
+    elif isinstance(ret, sl.Status):
+        handle_status(ret)
     else:
         handle_default(ret)

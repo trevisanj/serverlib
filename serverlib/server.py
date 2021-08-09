@@ -14,7 +14,7 @@ ST_LOOP = 30     # in main loop
 ST_STOPPED = 40  # stopped
 
 
-class Server(sl.WithCommands, sl.WithClosers):
+class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
     """Server class.
 
     Args:
@@ -31,20 +31,16 @@ class Server(sl.WithCommands, sl.WithClosers):
         return self.__state
 
     @property
-    def sleepers(self):
-        return self.__sleepers
-
-    @property
     def lo_ops(self):
         return self.__lo_ops
 
     def __init__(self, cfg, cmd=None, flag_basiccommands=True):
         sl.WithCommands.__init__(self)
         sl.WithClosers.__init__(self)
+        sl.WithSleepers.__init__(self)
         self.__state = ST_INIT
         self.cfg = cfg
         cfg.master = self
-        self.__sleepers = {}  # {name: _Sleeper, ...}
         self.__lo_ops = None  # {methodname:
         self._attach_cmd(_EssentialServerCommands())
         if flag_basiccommands: self._attach_cmd(BasicServerCommands())
@@ -68,47 +64,6 @@ class Server(sl.WithCommands, sl.WithClosers):
         _ret = self.cfg.to_dict()
         ret = list(_ret.items()), ["key", "value"]
         return ret
-
-    def wake_up(self, sleepername=None):
-        """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
-        if sleepername is not None:
-            self.__sleepers[sleepername].flag_wake_up = True
-        else:
-            for sleeper in self.__sleepers.values(): sleeper.flag_wake_up = True
-
-    async def wait_a_bit(self):
-        """Unified way to wait for a bit, usually before retrying something that goes wront."""
-        await self.sleep(0.1)
-
-    async def sleep(self, waittime, name=None):
-        """Takes a nap that can be prematurely terminated with self.wake_up()."""
-        my_debug = lambda s: self.logger.debug(f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
-
-        async def ensure_new_name(name):
-            i = 0
-            while sleeper.name in self.__sleepers:
-                if name is not None:
-                    # self.stop()
-                    msg = f"Called {self.__class__.__name__}.sleep({waittime}, '{name}') when '{name}' is already sleeping!"
-                    raise RuntimeError(msg)
-                sleeper.name += (" " if i == 0 else "")+chr(random.randint(65, 65+25))
-                i += 1
-
-        if isinstance(waittime, sl.Retry): waittime = waittime.waittime
-        interval = min(waittime, 0.1)
-        sleeper = _Sleeper(waittime, name)
-        await ensure_new_name(name)
-        self.__sleepers[sleeper.name] = sleeper
-        slept = 0
-        try:
-            my_debug("💤💤💤")
-            while slept < waittime and not sleeper.flag_wake_up:
-                await asyncio.sleep(interval)
-                slept += interval
-        finally:
-            my_debug("⏰WAKE⏰UP!⏰")
-            try: del self.__sleepers[sleeper.name]
-            except KeyError: pass
 
     async def run(self):
         # Automatically figures out all methods containing the word "loop" in them
@@ -250,14 +205,6 @@ class Server(sl.WithCommands, sl.WithClosers):
             sl.lowstate.numsockets -= 1
             ctx.destroy()
             sl.lowstate.numcontexts -= 1
-
-
-class _Sleeper:
-    def __init__(self, seconds, name=None):
-        self.seconds = seconds
-        self.name = a107.random_name() if name is None else name
-        self.task = None
-        self.flag_wake_up = False
 
 
 class _EssentialServerCommands(sl.ServerCommands):

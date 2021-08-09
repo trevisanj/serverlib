@@ -1,6 +1,6 @@
-__all__ = ["WithCommands", "WithClosers"]
+__all__ = ["WithCommands", "WithClosers", "WithSleepers"]
 
-import serverlib as sl, asyncio, inspect, a107
+import serverlib as sl, asyncio, inspect, a107, random
 
 class WithCommands:
     """This class enters as an ancestor for the Client and Server class in a multiple-inheritance composition."""
@@ -125,3 +125,65 @@ class WithClosers:
                 awaitables.append(method())
         await asyncio.gather(*awaitables)
         self.__flag_called_close = True
+
+
+class WithSleepers:
+    @property
+    def sleepers(self):
+        return self.__sleepers
+
+    def __init__(self):
+        self.__sleepers = {}  # {name: _Sleeper, ...}
+
+    def wake_up(self, sleepername=None):
+        """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
+        if sleepername is not None:
+            self.__sleepers[sleepername].flag_wake_up = True
+        else:
+            for sleeper in self.__sleepers.values(): sleeper.flag_wake_up = True
+
+    async def wait_a_bit(self):
+        """Unified way to wait for a bit, usually before retrying something that goes wront."""
+        await self.sleep(0.1)
+
+    async def sleep(self, waittime, name=None):
+        """Takes a nap that can be prematurely terminated with self.wake_up()."""
+        try: logger = self.logger
+        except AttributeError: logger = a107.get_python_logger()
+        my_debug = lambda s: logger.debug(
+            f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
+
+        async def ensure_new_name(name):
+            i = 0
+            while sleeper.name in self.__sleepers:
+                if name is not None:
+                    msg = f"Called {self.__class__.__name__}.sleep({waittime}, '{name}') when '{name}' is already sleeping!"
+                    raise RuntimeError(msg)
+                sleeper.name += (" " if i == 0 else "")+chr(random.randint(65, 65+25))
+                i += 1
+
+        if isinstance(waittime, sl.Retry): waittime = waittime.waittime
+        interval = min(waittime, 0.1)
+        sleeper = _Sleeper(waittime, name)
+        await ensure_new_name(name)
+        self.__sleepers[sleeper.name] = sleeper
+        slept = 0
+        try:
+            my_debug("💤💤💤")
+            while slept < waittime and not sleeper.flag_wake_up:
+                await asyncio.sleep(interval)
+                slept += interval
+        finally:
+            my_debug("⏰WAKE⏰UP!⏰")
+            try:
+                del self.__sleepers[sleeper.name]
+            except KeyError:
+                pass
+
+
+class _Sleeper:
+    def __init__(self, seconds, name=None):
+        self.seconds = seconds
+        self.name = a107.random_name() if name is None else name
+        self.task = None
+        self.flag_wake_up = False
