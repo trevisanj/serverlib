@@ -4,7 +4,7 @@ __all__ = ["make_help", "make_helpdata", "HelpData", "HelpGroup", "HelpItem", "m
 from dataclasses import dataclass
 from typing import *
 from colored import fg, bg, attr
-import inspect
+import inspect, re
 from .metacommand import *
 
 
@@ -39,21 +39,24 @@ class HelpData:
     groups: List[HelpGroup]
 
 
-def make_groups(cmd, flag_protected=True, flag_docstrings=False):
+def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None):
     groups = []
     for commands in cmd.values():
         items = []
         meta = commands.get_meta(flag_protected)
         for metacommand in meta:
+            # re filter
+            if refilter is not None and not re.search(refilter, metacommand.name): continue
+
             items.append(HelpItem(metacommand.name,
                                   metacommand.oneliner,
                                   inspect.signature(metacommand.method),
                                   docstring=None if not flag_docstrings else metacommand.method.__doc__))
-        groups.append(HelpGroup(commands.title, items))
+        if items: groups.append(HelpGroup(commands.title, items))
     return groups
 
 
-def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False):
+def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False, refilter=None):
     """Assembles HelpData object from Server or Client instance.
 
     Args:
@@ -62,21 +65,22 @@ def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False
         cmd: {name: Commands, ...}  (name not used)
         flag_protected: whether to include protected methods in help
         flag_docstrings: whether to include docstrings in help data
+        refilter: regular expression. If passed, will filter commands containing this expression
 
     Returns: a HelpData instance
 
     """
-    groups = make_groups(cmd, flag_protected, flag_docstrings)
+    groups = make_groups(cmd, flag_protected, flag_docstrings, refilter)
     ret = HelpData(title, description, groups)
     return ret
 
 
-def make_help(title, description, cmd, flag_protected=True):
+def make_help(title, description, cmd, flag_protected=True, refilter=None):
     """Makes help text from Server or Client instance.
 
     See make_helpdata() for description on parameters
     """
-    helpdata = make_helpdata(title, description, cmd, flag_protected)
+    helpdata = make_helpdata(title, description, cmd, flag_protected, refilter)
     text = make_text(helpdata)
     return text
 

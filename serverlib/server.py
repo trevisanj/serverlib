@@ -229,18 +229,22 @@ class _EssentialServerCommands(sl.ServerCommands):
         print(f"{fg('white')}{attr('bold')}{self.cfg.subappname}{attr('reset')} 👈")
         return self.cfg.subappname
 
-    async def _help(self, what=None, flag_docstrings=False):
+    async def _help(self, what=None, flag_docstrings=False, refilter=None):
         """Gets summary of available server commands or help on specific command.
 
         Args:
             what: specific command
             flag_docstrings: whether to include docstrings in help data
+            refilter: regular expression. If passed, will filter commands containing this expression
         """
         if what is None:
             cfg = self.master.cfg
             helpdata = sl.make_helpdata(title=cfg.subappname,
                                         description=cfg.description,
-                                        cmd=self.master.cmd, flag_protected=True, flag_docstrings=flag_docstrings)
+                                        cmd=self.master.cmd,
+                                        flag_protected=True,
+                                        flag_docstrings=flag_docstrings,
+                                        refilter=refilter)
             return helpdata
         else:
             if what not in self.master.metacommands:

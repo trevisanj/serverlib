@@ -87,9 +87,21 @@ class Console(sl.WithCommands, sl.WithClosers):
             self.__state = CST_STOPPED
             await self.close()
 
-    async def help(self, commandname=None, *args, **kwargs):
-        if not commandname: return await self._do_help()
-        else: return await self._do_help_what(commandname)
+    async def help(self, what=None):
+        """Help entry point.
+
+        Args:
+            what: may be a command name or may contain wildcards ("*"), e.g. "*draw*".
+
+        Returns:
+            str
+        """
+        flag_specific = what and "*" not in what
+        if flag_specific:
+            return await self._do_help_what(what)
+        else:
+            refilter = None if what is None else what.replace("*", ".*")
+            return await self._do_help(refilter=refilter)
 
     async def close(self):
         await sl.WithClosers.close(self)
@@ -109,16 +121,15 @@ class Console(sl.WithCommands, sl.WithClosers):
     async def _get_welcome(self):
         return self.cfg.get_welcome()
 
-    async def _do_help(self):
+    async def _do_help(self, refilter=None):
         cfg = self.cfg
         helpdata = sl.make_helpdata(title=cfg.subappname,
                                     description=cfg.description,
-                                    cmd=self.cmd, flag_protected=True)
-        specialgroup = sl.HelpGroup(title="Console specials", items=[
-            sl.HelpItem("?", "alias for 'help'"),
-            sl.HelpItem("exit", "exit console"),
-            sl.HelpItem("... >>>filename", "redirects output to file"), ])
-        helpdata.groups = [specialgroup]+helpdata.groups
+                                    cmd=self.cmd, flag_protected=True,
+                                    refilter=refilter)
+        if not refilter:
+            specialgroup = await self._get_help_specialgroup()
+            helpdata.groups = [specialgroup]+helpdata.groups
         text = sl.make_text(helpdata)
         return text
 
@@ -128,6 +139,14 @@ class Console(sl.WithCommands, sl.WithClosers):
         raise sl.NotAClientCommand(f"Not a client command: '{commandname}'")
 
     # PROTECTED (NOT OVERRIDABLE)
+
+    async def _get_help_specialgroup(self):
+        """Returns the help "special group"; called by Console and Client."""
+        specialgroup = sl.HelpGroup(title="Console specials", items=[
+            sl.HelpItem("?", "alias for 'help'"),
+            sl.HelpItem("exit", "exit console"),
+            sl.HelpItem("... >>>filename", "redirects output to file"), ])
+        return specialgroup
 
     def _parse_statement(self, statement, args, kwargs):
         self._statementdata = sl.parse_statement(statement, args, kwargs)

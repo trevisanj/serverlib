@@ -98,16 +98,15 @@ class Client(sl.Console):
             ret = await self.__execute_server()
         return ret
 
-    async def _do_help(self):
-        helpdata_server = await self.execute_server("_help")
+    async def _do_help(self, refilter=None):
+        helpdata_server = await self.execute_server("_help", refilter=refilter)
         cfg = self.cfg
         helpdata = sl.make_helpdata(title=cfg.subappname,
                                     description=cfg.description,
-                                    cmd=self.cmd, flag_protected=True)
-        specialgroup = sl.HelpGroup(title="Console specials", items=[
-            sl.HelpItem("?", "alias for 'help'"),
-            sl.HelpItem("exit", "exit console"),
-            sl.HelpItem("... >>>filename", "redirects output to file"), ])
+                                    cmd=self.cmd,
+                                    flag_protected=True,
+                                    refilter=refilter)
+        specialgroup = await self._get_help_specialgroup()
         helpdata.groups = [specialgroup]+helpdata.groups+helpdata_server.groups
         if not self.cfg.flag_ownidentity:
             helpdata.title = helpdata_server.title
