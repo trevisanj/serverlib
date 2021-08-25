@@ -77,8 +77,10 @@ class BaseConfig:
     def logger(self):
         if self.__logger is None:
             self.__logger = a107.get_new_logger(fn_log=self.logpath,
-                                           flag_log_file=self.flag_log_file, flag_log_console=self.flag_log_console,
-                                           level=self.logginglevel)
+                                                flag_log_file=self.flag_log_file,
+                                                flag_log_console=self.flag_log_console,
+                                                level=self.logginglevel,
+                                                name=self.subappname)
         return self.__logger
 
     def __init__(self,
