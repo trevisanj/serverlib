@@ -154,6 +154,7 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     async def _assure_initialized(self):
         if self.__state < CST_INITIALIZED:
+            self.cfg.read_configfile()
             await self._initialize_cmd()
             await self._on_initialize()
             self.__state = CST_INITIALIZED

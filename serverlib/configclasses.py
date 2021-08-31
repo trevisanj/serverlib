@@ -20,7 +20,7 @@ class BaseConfig:
     """
 
     defaultsuffix = None
-    default_flag_log_file = None
+    default_flag_log_file = False
 
     @property
     def autodir(self):
@@ -58,10 +58,13 @@ class BaseConfig:
         return self.__reportdir if self.__reportdir is not None else "/tmp"
 
     @property
-    def configpath(self):
-        location = self.configdir
+    def configfilename(self):
         filename = f"{self.subappname}-{self.suffix}.cfg"
-        configpath = os.path.join(location, "cfg", filename)
+        return filename
+
+    @property
+    def configpath(self):
+        configpath = os.path.join(self.configdir, "cfg", self.configfilename)
         return configpath
 
     @property
@@ -93,12 +96,14 @@ class BaseConfig:
                  subappname=None,
                  suffix=None,
                  description=None,
-                 reportdir=None):
+                 reportdir=None,
+                 defaultsuffix=None):
+        if defaultsuffix is not None:
+            self.defaultsuffix = defaultsuffix
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.defaultsuffix"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
         if logginglevel is None: logginglevel = a107.logging_level
         if flag_log_console is None: flag_log_console = a107.flag_log_console
-        if flag_log_file is None: flag_log_file = a107.flag_log_file
         self.__configdir = configdir
         self.__datadir = datadir
         self.__reportdir = reportdir
@@ -122,15 +127,35 @@ class BaseConfig:
         """This method populates self with attributes found within config file.
 
         Like this one can override hard-coded attributes.
+
+        Looks for files:
+            1. '<self.configpath>'
+            2. '<self.configfilename>'
+
+        The order above makes local directory settings prioritary.
+
+        Use case: one way to create a custom "client" directory is to:
+            - run ```saccapoke.py```
+            - copy ~/.sacca/cfg/*client.cfg to some directory
+            - then change whatever you want
         """
+
+        def _populate_self(h):
+            for attrname, value in h.items():
+                setattr(self, attrname, value)
+
+        localpath = os.path.join(".", self.configfilename)
+        if os.path.isfile(localpath):
+            h = self.__get_configobj(localpath, False)
+            _populate_self(h)
+
         configpath = self.configpath
         d, f = os.path.split(configpath)
         if not os.path.isdir(d):
             a107.ensure_path(d)
-            self.master.logger.info(f"Created directory '{d}'")
-        h = self.__get_configobj()
-        for attrname, value in h.items():
-            setattr(self, attrname, value)
+            self.logger.info(f"Created directory '{d}'")
+        h = self.__get_configobj(configpath, True)
+        _populate_self(h)
 
     def get(self, attrname, default=None):
         """Retrieves attribute with default option."""
@@ -157,8 +182,13 @@ class BaseConfig:
             ret += "\n"+a107.kebab(self.description, KEBABWIDTH)
         return ret
 
-    def __get_configobj(self):
-        return configobj.ConfigObj(self.configpath, create_empty=True, unrepr=True)
+    def __get_configobj(self, path_, flag_create_empty):
+        flag_exists = os.path.isfile(path_)
+        ret = configobj.ConfigObj(path_, create_empty=flag_create_empty, unrepr=True)
+        flag_exists_ = os.path.isfile(path_)
+        if flag_exists_ != flag_exists:
+            self.logger.info(f"Created file '{path_}'")
+        return ret
 
 
 class ClientServerConfig(BaseConfig):
