@@ -63,9 +63,16 @@ class Client(sl.Console):
             # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
 
-            # TODO this doesn't seem right: it is just zmq.Again, man
+            # 20210912 I removed this socket deletion in case of zmq.Again error, as this error is a 0MQ statement to
+            # retry, not to delete the socket
+            # self.__del_socket()
+
+            raise sl.Retry(a107.str_exc(e))
+        except zmq.ZMQError as e:
+            # 20210912 This makes more sense, i.e., deleting the socket only after ruling out less serious situations
             self.__del_socket()
             raise sl.Retry(a107.str_exc(e))
+
         ret = process_result(b)
         return ret
 
