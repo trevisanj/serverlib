@@ -17,6 +17,10 @@ class BaseConfig:
         subappname: "sub-appname". If undefined, falls back to appname. Affects all properties "<*>path".
                 Use for complex-structured applications with several servers. Otherwise, use appname and
                 leave this.
+
+    Howto:
+
+        - add configurable attribute: override __init__()
     """
 
     defaultsuffix = None

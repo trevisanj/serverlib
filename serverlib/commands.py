@@ -12,7 +12,10 @@ class Commands(sl.Intelligence):
 
 
 class ServerCommands(Commands):
-    pass
+    async def getd_servercfg(self):
+        # if not hasattr(self, "cfg"):
+        #     return sl.Status("I don't have a .cfg")
+        return self.cfg.to_dict()
 
 
 class ClientCommands(Commands):

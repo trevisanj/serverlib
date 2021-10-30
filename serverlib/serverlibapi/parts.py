@@ -32,7 +32,8 @@ class WithCommands:
                 self.cmd[_.title] = _
                 for metacommand in _.get_meta(flag_protected=True):
                     name = metacommand.name
-                    if name in self.metacommands:
+                    # WARNING: #gambiarra ahead
+                    if name in self.metacommands and name not in ["getd_cfg"]:
                         print(a107.format_warning(f"Repeated command: '{name}'"))  # TODO let's see, maybe we let commands override each other
                     self.metacommands[name] = metacommand
 

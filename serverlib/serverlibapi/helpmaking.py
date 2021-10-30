@@ -99,7 +99,7 @@ def make_text(helpdata):
     def format_oneliner(helpitem):
         return f"{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
 
-    methodlen = max([max([len(item.name) for item in helpgroup.items]) for helpgroup in helpdata.groups if len(helpgroup) > 0])
+    methodlen = max([max([len(item.name) for item in helpgroup.items]+[0]) for helpgroup in helpdata.groups if len(helpgroup) > 0]+[0])
 
     lines = format_title(helpdata)
     if helpdata.description: lines.extend(format_description(helpdata.description))
