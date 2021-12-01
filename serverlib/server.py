@@ -229,13 +229,15 @@ class _EssentialServerCommands(sl.ServerCommands):
         print(f"{fg('white')}{attr('bold')}{self.cfg.subappname}{attr('reset')} 👈")
         return self.cfg.subappname
 
-    async def _help(self, what=None, flag_docstrings=False, refilter=None):
+    async def _help(self, what=None, flag_docstrings=False, refilter=None, fav=None, favonly=False):
         """Gets summary of available server commands or help on specific command.
 
         Args:
             what: specific command
             flag_docstrings: whether to include docstrings in help data
             refilter: regular expression. If passed, will filter commands containing this expression
+            fav: favourites list
+            favonly: flag, whether to include only favourite items
         """
         if what is None:
             cfg = self.master.cfg
@@ -244,7 +246,9 @@ class _EssentialServerCommands(sl.ServerCommands):
                                         cmd=self.master.cmd,
                                         flag_protected=True,
                                         flag_docstrings=flag_docstrings,
-                                        refilter=refilter)
+                                        refilter=refilter,
+                                        fav=fav,
+                                        favonly=favonly)
             return helpdata
         else:
             if what not in self.master.metacommands:

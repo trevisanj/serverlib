@@ -101,7 +101,8 @@ class BaseConfig:
                  suffix=None,
                  description=None,
                  reportdir=None,
-                 defaultsuffix=None):
+                 defaultsuffix=None,
+                 ):
         if defaultsuffix is not None:
             self.defaultsuffix = defaultsuffix
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.defaultsuffix"
@@ -148,18 +149,19 @@ class BaseConfig:
             for attrname, value in h.items():
                 setattr(self, attrname, value)
 
-        localpath = os.path.join(".", self.configfilename)
-        if os.path.isfile(localpath):
-            h = self.__get_configobj(localpath, False)
-            _populate_self(h)
-
         configpath = self.configpath
         d, f = os.path.split(configpath)
         if not os.path.isdir(d):
             a107.ensure_path(d)
             self.logger.info(f"Created directory '{d}'")
-        h = self.__get_configobj(configpath, True)
+        h = self.__get_configobj_with_path(configpath, True)
         _populate_self(h)
+
+        localpath = os.path.join(".", self.configfilename)
+        if os.path.isfile(localpath):
+            h = self.__get_configobj_with_path(localpath, False)
+            _populate_self(h)
+
 
     def get(self, attrname, default=None):
         """Retrieves attribute with default option."""
@@ -186,12 +188,27 @@ class BaseConfig:
             ret += "\n"+a107.kebab(self.description, KEBABWIDTH)
         return ret
 
-    def __get_configobj(self, path_, flag_create_empty):
+    def __get_configobj_with_path(self, path_, flag_create_empty):
+        """Gets config for specific file path."""
         flag_exists = os.path.isfile(path_)
         ret = configobj.ConfigObj(path_, create_empty=flag_create_empty, unrepr=True)
         flag_exists_ = os.path.isfile(path_)
         if flag_exists_ != flag_exists:
             self.logger.info(f"Created file '{path_}'")
+        return ret
+
+    def __get_configobj(self):
+        """Gets config in local path or in configuration directory, whichever is found first."""
+        localpath = os.path.join(".", self.configfilename)
+        if os.path.isfile(localpath):
+            ret = self.__get_configobj_with_path(localpath, False)
+        else:
+            configpath = self.configpath
+            d, f = os.path.split(configpath)
+            if not os.path.isdir(d):
+                a107.ensure_path(d)
+                self.logger.info(f"Created directory '{d}'")
+            ret = self.__get_configobj_with_path(configpath, True)
         return ret
 
 
@@ -241,17 +258,38 @@ class ClientConfig(ClientServerConfig, _WithHistory):
 
     Introduces the concept of "own identity", as a client may assume the subappname and description of
     the server, or use own subappname and description.
+
+    Also now consoles and clients have "favourites" ability
+
+    Args:
+        flag_ownidentify:
+        fav: favourites list
     """
 
     defaultsuffix = "client"
     defaulthost = "127.0.0.1"
     default_flag_log_file = False
 
-    def __init__(self, *args, flag_ownidentity=False, **kwargs):
+    def __init__(self, *args, flag_ownidentity=False, fav=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if fav is None: fav = []
+        self.fav = fav
         self.flag_ownidentity = flag_ownidentity
 
 
 class ConsoleConfig(BaseConfig, _WithHistory):
+    """Configuration for consoles.
+
+    Now consoles and clients have "favourites" ability
+
+    Args:
+        fav: favourites list
+    """
+
     defaultsuffix = "console"
     default_flag_log_file = False
+
+    def __init__(self, *args, fav=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if fav is None: fav = []
+        self.fav = fav

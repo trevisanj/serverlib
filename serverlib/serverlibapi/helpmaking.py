@@ -14,6 +14,9 @@ STYLE_DESCRIPTION = fg("yellow")            # help description
 STYLE_GROUPTITLE = fg("light_yellow")       # group title
 STYLE_NAME = attr("bold")+fg("light_gray")  # method name
 
+# FAVSTAR = attr("bold")+fg("white")+"★"+attr("reset")
+FAVSTAR = "🌟"
+NOTFAV = "  "
 
 @dataclass
 class HelpItem:
@@ -21,6 +24,7 @@ class HelpItem:
     oneliner: str
     signature: inspect.Signature = None
     docstring: str = None
+    flag_fav: bool = False
 
 
 @dataclass
@@ -39,7 +43,8 @@ class HelpData:
     groups: List[HelpGroup]
 
 
-def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None):
+def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, fav=None, favonly=False):
+    if fav is None: fav = []
     groups = []
     for commands in cmd.values():
         items = []
@@ -48,15 +53,21 @@ def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None):
             # re filter
             if refilter is not None and not re.search(refilter, metacommand.name): continue
 
+            flag_fav = metacommand.name.lower() in fav
+
+            if favonly and not flag_fav: continue
+
             items.append(HelpItem(metacommand.name,
                                   metacommand.oneliner,
                                   inspect.signature(metacommand.method),
-                                  docstring=None if not flag_docstrings else metacommand.method.__doc__))
+                                  docstring=None if not flag_docstrings else metacommand.method.__doc__,
+                                  flag_fav=flag_fav))
         if items: groups.append(HelpGroup(commands.title, items))
     return groups
 
 
-def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False, refilter=None):
+def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False, refilter=None, fav=None,
+                  favonly=False):
     """Assembles HelpData object from Server or Client instance.
 
     Args:
@@ -66,21 +77,23 @@ def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False
         flag_protected: whether to include protected methods in help
         flag_docstrings: whether to include docstrings in help data
         refilter: regular expression. If passed, will filter commands containing this expression
+        fav: list of favourites (command names)
+        favonly: flag, whether to include only favourite items
 
     Returns: a HelpData instance
 
     """
-    groups = make_groups(cmd, flag_protected, flag_docstrings, refilter)
+    groups = make_groups(cmd, flag_protected, flag_docstrings, refilter, fav, favonly)
     ret = HelpData(title, description, groups)
     return ret
 
 
-def make_help(title, description, cmd, flag_protected=True, refilter=None):
+def make_help(title, description, cmd, flag_protected=True, refilter=None, fav=None):
     """Makes help text from Server or Client instance.
 
     See make_helpdata() for description on parameters
     """
-    helpdata = make_helpdata(title, description, cmd, flag_protected, refilter)
+    helpdata = make_helpdata(title, description, cmd, flag_protected, refilter, fav)
     text = make_text(helpdata)
     return text
 
@@ -97,7 +110,8 @@ def make_text(helpdata):
         return f"{STYLE_GROUPTITLE}{group.title}{attr('reset')}"
 
     def format_oneliner(helpitem):
-        return f"{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
+        favthing = NOTFAV if not helpitem.flag_fav else FAVSTAR
+        return f"{favthing}{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
 
     methodlen = max([max([len(item.name) for item in helpgroup.items]+[0]) for helpgroup in helpdata.groups if len(helpgroup) > 0]+[0])
 

@@ -105,16 +105,20 @@ class Client(sl.Console):
             ret = await self.__execute_server()
         return ret
 
-    async def _do_help(self, refilter=None):
-        helpdata_server = await self.execute_server("_help", refilter=refilter)
+    async def _do_help(self, refilter=None, fav=None, favonly=None):
+        helpdata_server = await self.execute_server("_help", refilter=refilter, fav=fav, favonly=favonly)
         cfg = self.cfg
         helpdata = sl.make_helpdata(title=cfg.subappname,
                                     description=cfg.description,
                                     cmd=self.cmd,
                                     flag_protected=True,
-                                    refilter=refilter)
-        specialgroup = await self._get_help_specialgroup()
-        helpdata.groups = [specialgroup]+helpdata.groups+helpdata_server.groups
+                                    refilter=refilter,
+                                    fav=fav,
+                                    favonly=favonly)
+        helpdata.groups = helpdata.groups+helpdata_server.groups
+        if not refilter and not favonly:
+            specialgroup = await self._get_help_specialgroup()
+            helpdata.groups = [specialgroup]+helpdata.groups
         if not self.cfg.flag_ownidentity:
             helpdata.title = helpdata_server.title
             helpdata.description = helpdata_server.description

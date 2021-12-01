@@ -4,7 +4,11 @@ import a107, serverlib as sl, asyncio, inspect
 
 
 class Intelligence(sl.WithClosers):
-    """Intelligence base class: master, server, logger, cfg, initialize(), close(), _append_closers() etc."""
+    """
+    Intelligence base class: master, server, logger, cfg, initialize(), close(), get_meta() etc.
+
+    It does not necessarily require a server nor initialization.
+    """
 
     # Custom title for this class, e.g. appearing as the title of a group of commands in help text
     _title = None
@@ -61,7 +65,7 @@ class Intelligence(sl.WithClosers):
     # INTERFACE
 
     def get_meta(self, flag_protected=True):
-        """Returns list of MetaCommand objects filtered according to rules."""
+        """Creates list of MetaCommand's based on own methods, which are filtered according to get_methods() rules."""
         return [sl.MetaCommand(method) for method in self.get_methods(flag_protected)]
 
     def get_methods(self, flag_protected=False):

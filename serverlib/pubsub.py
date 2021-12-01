@@ -1,6 +1,6 @@
 __all__ = ["subscriber", "Publisher", "Subscriber"]
 
-import zmq, zmq.asyncio, serverlib as sl, a107
+import zmq, zmq.asyncio, serverlib as sl, a107, asyncio
 from colored import fg, bg, attr
 
 
@@ -19,6 +19,7 @@ class Publisher(sl.Intelligence):
     def __init__(self, master, hopo):
         super().__init__(master)
         self.hopo = hopo
+        self.__lock = asyncio.Lock()
 
     async def _on_initialize(self):
         self.context = zmq.asyncio.Context()
@@ -40,12 +41,18 @@ class Publisher(sl.Intelligence):
         sl.lowstate.numcontexts -= 1
 
     async def publish(self, msg):
+        """Publishes message.
+
+        This routine uses a lock in order to allow a single publisher to be shared by several concurrent tasks
+        """
         assert isinstance(msg, bytes), "Message must be bytes here"
         try:
             self.logger.debug(f"PPPPPPPPPPPPPPPPPublishing '{msg.decode()}'")
         except UnicodeDecodeError:
             self.logger.debug(f"PPPPPPPPPPPPPPPPPublishing sth; unfortumately IT CAN'T BE SHOWN HERE BECAUSE THERE ARE CHILDREN WATCHING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        await self.socket.send(msg)
+
+        async with self.__lock:
+            await self.socket.send(msg)
 
 
 async def subscriber(hopos, topics, logger=None):

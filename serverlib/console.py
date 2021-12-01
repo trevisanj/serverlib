@@ -87,11 +87,12 @@ class Console(sl.WithCommands, sl.WithClosers):
             self.__state = CST_STOPPED
             await self.close()
 
-    async def help(self, what=None):
+    async def help(self, what=None, favonly=False):
         """Help entry point.
 
         Args:
             what: may be a command name or may contain wildcards ("*"), e.g. "*draw*".
+            favonly: whether to get only favourites
 
         Returns:
             str
@@ -101,7 +102,7 @@ class Console(sl.WithCommands, sl.WithClosers):
             return await self._do_help_what(what)
         else:
             refilter = None if what is None else what.replace("*", ".*")
-            return await self._do_help(refilter=refilter)
+            return await self._do_help(refilter=refilter, fav=self.cfg.fav, favonly=favonly)
 
     async def close(self):
         await sl.WithClosers.close(self)
@@ -121,13 +122,15 @@ class Console(sl.WithCommands, sl.WithClosers):
     async def _get_welcome(self):
         return self.cfg.get_welcome()
 
-    async def _do_help(self, refilter=None):
+    async def _do_help(self, refilter=None, fav=None, favonly=False):
         cfg = self.cfg
         helpdata = sl.make_helpdata(title=cfg.subappname,
                                     description=cfg.description,
                                     cmd=self.cmd, flag_protected=True,
-                                    refilter=refilter)
-        if not refilter:
+                                    refilter=refilter,
+                                    fav=fav,
+                                    favonly=favonly)
+        if not refilter and not favonly:
             specialgroup = await self._get_help_specialgroup()
             helpdata.groups = [specialgroup]+helpdata.groups
         text = sl.make_text(helpdata)
@@ -252,9 +255,27 @@ def my_print_exception(e):
 
 
 class _EssentialConsoleCommands(sl.ConsoleCommands):
-    async def help(self, what=None):
+    async def help(self, what=None, favonly=False):
         """Gets general help or help on specific command."""
-        return await self.master.help(what)
+        return await self.master.help(what, favonly)
+
+    async def favhelp(self, what=None, favonly=False):
+        """Equivalent to "help favonly=True"."""
+        return await self.help(favonly=True)
+
+    async def fav(self, what):
+        """Toggles favourite command."""
+        fav = self.master.cfg.fav
+        what= str(what).lower()
+        if what in fav:
+            fav.remove(what)
+        else:
+            fav.append(what)
+        self.master.cfg.set("fav", fav)
+
+    async def get_fav(self):
+        """Return list of favourite commands."""
+        return self.master.cfg.fav
 
     async def getd_lowstate(self):
         return sl.lowstate.__dict__
