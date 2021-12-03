@@ -155,10 +155,14 @@ class Client(sl.Console):
 
     def __del_socket(self):
         if self.__socket is not None:
+            print("APAGANDO SOCKET", self.__class__.__name__)
             try:
                 self.__socket.setsockopt(zmq.LINGER, 0)
                 self.__socket.close()
                 sl.lowstate.numsockets -= 1
+                print("sl.lowstate.numsockets", sl.lowstate.numsockets)
             except zmq.ZMQError as e:
+                raise
+            except:
                 raise
             self.__socket = None

@@ -259,3 +259,9 @@ class _EssentialServerCommands(sl.ServerCommands):
             helpitem = sl.make_helpitem(self.master.metacommands[what], True, fav)
             return helpitem
 
+    async def _s_getd_lowstate(self):
+        """Returns serverlib's "lowstate" for server
+
+        As opposed to client-side "getd_lowstate()"
+        """
+        return sl.lowstate.__dict__

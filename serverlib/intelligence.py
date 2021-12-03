@@ -74,7 +74,9 @@ class Intelligence(sl.WithClosers):
         _SUPEREXCLUDED = ("initialize", "close", "get_methods", "get_meta")
         return [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
                 if "__" not in x[0]
-                and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer"))
+                and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer",
+                                         "_i_",  # #convention for internal commands not to be picked up by get_methods()
+                                         ))
                 and (flag_protected or not x[0].startswith("_"))
                 and x[0] not in _SUPEREXCLUDED and x[0] not in self._excluded]
 

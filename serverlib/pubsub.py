@@ -117,6 +117,7 @@ class Subscriber:
 
         self.context = zmq.asyncio.Context()
         self.socket = self.context.socket(zmq.SUB)
+        sl.lowstate.numsockets += 1
 
         for hopo in hopos:
             url = sl.hopo2url(hopo)
@@ -160,6 +161,7 @@ class Subscriber:
 
     async def close(self):
         self.socket.close()
+        sl.lowstate.numsockets -= 1
         self.context.destroy()
         self.logger.debug(format_wow("subscriber() says bye"))
 
