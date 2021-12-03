@@ -238,6 +238,9 @@ class _EssentialServerCommands(sl.ServerCommands):
             refilter: regular expression. If passed, will filter commands containing this expression
             fav: favourites list
             favonly: flag, whether to include only favourite items
+
+        Returns:
+            serverlib.HelpData or serverlib.HelpItem
         """
         if what is None:
             cfg = self.master.cfg
@@ -253,5 +256,6 @@ class _EssentialServerCommands(sl.ServerCommands):
         else:
             if what not in self.master.metacommands:
                 raise ValueError("Invalid method: '{}'".format(what))
-            return sl.format_method(self.master.metacommands[what].method)
+            helpitem = sl.make_helpitem(self.master.metacommands[what], True, fav)
+            return helpitem
 

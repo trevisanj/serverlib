@@ -1,5 +1,5 @@
 __all__ = ["make_help", "make_helpdata", "HelpData", "HelpGroup", "HelpItem", "make_text", "format_method",
-           "make_groups"]
+           "make_groups", "make_helpitem"]
 
 from dataclasses import dataclass
 from typing import *
@@ -7,6 +7,8 @@ from colored import fg, bg, attr
 import inspect, re
 from .metacommand import *
 
+# ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
+# Text-rendering configuration
 
 # Styles
 STYLE_TITLE = fg("white")+attr("bold")      # help title
@@ -14,9 +16,13 @@ STYLE_DESCRIPTION = fg("yellow")            # help description
 STYLE_GROUPTITLE = fg("light_yellow")       # group title
 STYLE_NAME = attr("bold")+fg("light_gray")  # method name
 
+# How to distinguish between stared and non-stared methods
 # FAVSTAR = attr("bold")+fg("white")+"★"+attr("reset")
 FAVSTAR = "🌟"
 NOTFAV = "  "
+
+# ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
+# Data classes
 
 @dataclass
 class HelpItem:
@@ -43,6 +49,15 @@ class HelpData:
     groups: List[HelpGroup]
 
 
+# ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
+# Actions
+
+
+def favthing(helpitem):
+    """Returns text identifying method as favourite of else empty space(s) of same length."""
+    return NOTFAV if not helpitem.flag_fav else FAVSTAR
+
+
 def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, fav=None, favonly=False):
     if fav is None: fav = []
     groups = []
@@ -57,13 +72,18 @@ def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, 
 
             if favonly and not flag_fav: continue
 
-            items.append(HelpItem(metacommand.name,
-                                  metacommand.oneliner,
-                                  inspect.signature(metacommand.method),
-                                  docstring=None if not flag_docstrings else metacommand.method.__doc__,
-                                  flag_fav=flag_fav))
+            items.append(make_helpitem(metacommand, flag_docstrings, fav))
         if items: groups.append(HelpGroup(commands.title, items))
     return groups
+
+
+def make_helpitem(metacommand, flag_docstrings, fav):
+    flag_fav = metacommand.name.lower() in fav
+    return HelpItem(metacommand.name,
+                    metacommand.oneliner,
+                    inspect.signature(metacommand.method),
+                    docstring=None if not flag_docstrings else metacommand.method.__doc__,
+                    flag_fav=flag_fav)
 
 
 def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False, refilter=None, fav=None,
@@ -110,8 +130,7 @@ def make_text(helpdata):
         return f"{STYLE_GROUPTITLE}{group.title}{attr('reset')}"
 
     def format_oneliner(helpitem):
-        favthing = NOTFAV if not helpitem.flag_fav else FAVSTAR
-        return f"{favthing}{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
+        return f"{favthing(helpitem)}{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
 
     methodlen = max([max([len(item.name) for item in helpgroup.items]+[0]) for helpgroup in helpdata.groups if len(helpgroup) > 0]+[0])
 
@@ -128,7 +147,10 @@ def make_text(helpdata):
     return "\n".join(lines)
 
 
-def format_method(method):
+def format_method(helpitem):
     """Command-specific help."""
-    sig = str(inspect.signature(method)).replace("(", "").replace(")", "").replace(",", "")
-    return "{}{} {}{}\n\n{}".format(STYLE_NAME, method.__name__, sig, attr("reset"), method.__doc__)
+    sig = str(helpitem.signature).replace("(", "").replace(")", "").replace(",", "")
+    return "{}{}{} {}{}\n\n{}".format(
+        favthing(helpitem),
+        STYLE_NAME, helpitem.name, sig, attr("reset"),
+        helpitem.docstring)

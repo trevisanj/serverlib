@@ -138,7 +138,8 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     async def _do_help_what(self, commandname):
         if commandname in self.metacommands:
-            return sl.format_method(self.metacommands[commandname].method)
+
+            return sl.format_method(sl.make_helpitem(self.metacommands[commandname], True, self.cfg.fav))
         raise sl.NotAClientCommand(f"Not a client command: '{commandname}'")
 
     # PROTECTED (NOT OVERRIDABLE)

@@ -130,7 +130,8 @@ class Client(sl.Console):
         try:
             return await super()._do_help_what(commandname)
         except sl.NotAClientCommand:
-            return await self.execute_server("_help", commandname)
+            # Note: it is not the best way to send the list of favourites to the server ... but whatever
+            return sl.format_method(await self.execute_server("_help", commandname, fav=self.cfg.fav))
 
     # PRIVATE
 
