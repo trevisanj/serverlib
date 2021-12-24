@@ -5,6 +5,8 @@ from contextlib import redirect_stdout
 from serverlib.consts import *
 from colored import attr
 
+# I have to disable this, otherwise any input() result will be automatically added to history.
+readline.set_auto_history(False)
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
@@ -71,7 +73,9 @@ class Console(sl.WithCommands, sl.WithClosers):
         try:
             while True:
                 self.flag_needs_to_reset_colors = True
+                readline.set_auto_history(True)
                 st = input("{}{}{}>".format(COLOR_INPUT, attr("bold"), prompt))
+                readline.set_auto_history(False)
                 print(attr("reset"), end="")
                 self.flag_needs_to_reset_colors = False
 
@@ -135,6 +139,10 @@ class Console(sl.WithCommands, sl.WithClosers):
             helpdata.groups = [specialgroup]+helpdata.groups
         text = sl.make_text(helpdata)
         return text
+
+    def _handle_result(self, result):
+        """Optional result handler. Must return (ret, flag_handled)."""
+        return None, False
 
     async def _do_help_what(self, commandname):
         if commandname in self.metacommands:
@@ -226,7 +234,9 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     def __print_result(self, ret):
         def do_print(flag_colors):
-            sl.print_result(ret, self.logger, flag_colors)
+            ret_, flag_handled = self._handle_result(ret)
+            ret__ = ret_ if flag_handled else ret
+            sl.print_result(ret__, self.logger, flag_colors)
 
         outputfilename = self._statementdata.outputfilename
         if outputfilename:

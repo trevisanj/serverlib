@@ -4,7 +4,7 @@ __all__ = ["make_help", "make_helpdata", "HelpData", "HelpGroup", "HelpItem", "m
 from dataclasses import dataclass
 from typing import *
 from colored import fg, bg, attr
-import inspect, re
+import inspect, re, ansiwrap, math, shutil
 from .metacommand import *
 
 # ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
@@ -17,9 +17,9 @@ STYLE_GROUPTITLE = fg("light_yellow")       # group title
 STYLE_NAME = attr("bold")+fg("light_gray")  # method name
 
 # How to distinguish between stared and non-stared methods
-# FAVSTAR = attr("bold")+fg("white")+"★"+attr("reset")
-FAVSTAR = "🌟"
-NOTFAV = "  "
+FAVSTAR = attr("blink")+attr("bold")+fg("white")+"✺"+attr("reset")
+# FAVSTAR = "🌟"
+NOTFAV = " "
 
 # ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
 # Data classes
@@ -118,7 +118,16 @@ def make_help(title, description, cmd, flag_protected=True, refilter=None, fav=N
     return text
 
 
-def make_text(helpdata):
+def make_text(helpdata, numcolumns=None, preferredcolumnwidth=120, spacer=" | "):
+    """
+    Creates help text (string)
+
+    Args:
+        helpdata: HelpData object
+        numcolumns: if not specified, automatic
+        preferredcolumnwidth:
+        spacer: column spacer
+    """
     def format_title(helpdata):
         return [f"{STYLE_TITLE}{helpdata.title}",
                 "="*len(helpdata.title)+attr("reset")]
@@ -132,6 +141,13 @@ def make_text(helpdata):
     def format_oneliner(helpitem):
         return f"{favthing(helpitem)}{STYLE_NAME}{helpitem.name:>{methodlen}}{attr('reset')} -- {helpitem.oneliner}"
 
+    terminalwidth = shutil.get_terminal_size()[0]
+    if numcolumns is None:
+        s = len(spacer)
+        ROUNDBREAK = 2  # will make 2.6 round to 2, not to 3 etc.
+        numcolumns = int(round((terminalwidth+s)/(preferredcolumnwidth+s)*ROUNDBREAK)/ROUNDBREAK)
+    columnwidth = int((terminalwidth+s*(1-numcolumns))/numcolumns)
+
     methodlen = max([max([len(item.name) for item in helpgroup.items]+[0]) for helpgroup in helpdata.groups if len(helpgroup) > 0]+[0])
 
     lines = format_title(helpdata)
@@ -144,7 +160,28 @@ def make_text(helpdata):
         for helpitem in helpgroup.items:
             lines.append(format_oneliner(helpitem))
 
-    return "\n".join(lines)
+    if numcolumns == 1:
+        return "\n".join(lines)
+
+    lines_ = []
+    for line in lines:
+        wrapped = ansiwrap.wrap(line, columnwidth)
+        for wrappedline in wrapped:
+            lines_.append(wrappedline+" "*(columnwidth-ansiwrap.ansilen(wrappedline)))
+    n = len(lines_)
+    numrows = math.ceil(n/numcolumns)
+    i = 0
+    _ret = [""]*numrows
+    icol = 0
+    while i <= n-1:
+        spacer_ = spacer if icol > 0 else ""
+        for j in range(numrows):
+            _ret[j] += spacer_+lines_[i]
+            i += 1
+            if i >= n: break
+        icol += 1
+
+    return "\n".join(_ret)
 
 
 def format_method(helpitem):

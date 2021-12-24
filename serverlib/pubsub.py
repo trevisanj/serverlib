@@ -43,9 +43,14 @@ class Publisher(sl.Intelligence):
     async def publish(self, msg):
         """Publishes message.
 
+        Args:
+            msg: bytes or str
+
         This routine uses a lock in order to allow a single publisher to be shared by several concurrent tasks
         """
-        assert isinstance(msg, bytes), "Message must be bytes here"
+
+        if isinstance(msg, str): msg = msg.encode()
+
         try:
             self.logger.debug(f"PPPPPPPPPPPPPPPPPublishing '{msg.decode()}'")
         except UnicodeDecodeError:

@@ -98,7 +98,9 @@ def print_result(ret, logger=None, flag_colors=True):
         print(text)
 
     def handle_status(arg):
-        print(f"{COLOR_HEADER}Status:{RESET} {a107.fancilyquoted(arg.msg)}")
+        msg = arg.msg if not isinstance(arg.msg, (list, tuple)) else "\n".join(arg.msg)
+        print(f"{COLOR_HEADER}Status:{RESET} {a107.fancilyquoted(msg)}")
+        print_result(arg.ret, logger, flag_colors)  # recursive call to print result in Status object
 
     def handle_default(arg):
         if not isinstance(arg, str): arg = str(arg)
@@ -113,6 +115,7 @@ def print_result(ret, logger=None, flag_colors=True):
 
     if isinstance(ret, str):
         print(ret)
+
     elif isinstance(ret, tuple) and len(ret) == 2 and isinstance(ret[0], list) and isinstance(ret[1], list):
         # Tries to detect "tabulate-like" (rows, headers) arguments
         print_tabulated(_powertabulate(*ret))
