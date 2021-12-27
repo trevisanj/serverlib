@@ -1,10 +1,11 @@
 # TODO this could be a package in itself, with option to configure the "power tabulate map"
 
-__all__ = ["print_result"]
+__all__ = ["print_result", "result2str"]
 
-import tabulate, a107, serverlib as sl, textwrap, re, pl3
+import tabulate, a107, serverlib as sl, textwrap, re, pl3, io
 from serverlib.consts import *
 from colored import fg, bg, attr
+from contextlib import redirect_stdout
 
 
 _powertabulatemap = [
@@ -129,3 +130,17 @@ def print_result(ret, logger=None, flag_colors=True):
         handle_status(ret)
     else:
         handle_default(ret)
+
+
+def result2str(ret, logger=None, flag_colors=True):
+    """Captures print_result() output to redirect it to a string.
+
+    See print_results() for arguments.
+
+    References:
+        [1] https://stackoverflow.com/questions/1218933/can-i-redirect-the-stdout-into-some-sort-of-string-buffer
+    """
+    with io.StringIO() as buf, redirect_stdout(buf):
+        print_result(ret, logger, flag_colors)
+        output = buf.getvalue()
+    return output
