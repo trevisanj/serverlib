@@ -23,7 +23,7 @@ class BaseConfig:
         - add configurable attribute: override __init__()
     """
 
-    defaultsuffix = None
+    defaultsuffix = ""
     default_flag_log_file = False
 
     @property
@@ -63,7 +63,7 @@ class BaseConfig:
 
     @property
     def configfilename(self):
-        filename = f"{self.subappname}-{self.suffix}.cfg"
+        filename = f"{self.subappname}{self.dash_suffix_or_not()}.cfg"
         return filename
 
     @property
@@ -74,7 +74,7 @@ class BaseConfig:
     @property
     def logpath(self):
         """Returns the path to the '.log' file."""
-        return os.path.join(self.datadir, "log", f"{self.subappname}-{self.suffix}.log")
+        return os.path.join(self.datadir, "log", f"{self.subappname}{self.dash_suffix_or_not()}.log")
 
     @property
     def stoppath(self):
@@ -125,6 +125,26 @@ class BaseConfig:
     def __str__(self):
         return sl.cfg2str(self)
 
+    def dash_suffix_or_not(self, suffix=None):
+        """Eventually prefixes suffix with a "-"
+
+        Args:
+            suffix: defaults to self.suffix
+
+        Returns:
+            "-"+(suffix or self.suffix), or ""
+
+            a) if suffix is empty, returns ""
+            b) if suffix starts with ".", does not precede suffix with a "-"
+            c) if suffix is not empty and does not start with a (".", "-"), precedes it with a "-"
+        """
+        if suffix is None:
+            suffix = self.suffix
+        if not suffix: return ""
+        if suffix.startswith((".", "-")):
+            return suffix
+        return f"-{suffix}"
+
     def to_dict(self):
         return sl.cfg2dict(self)
 
@@ -135,7 +155,7 @@ class BaseConfig:
 
         Looks for files:
             1. '<self.configpath>'
-            2. '<self.configfilename>'
+            2. './<self.configfilename>'
 
         The order above makes local directory settings prioritary.
 
@@ -179,7 +199,7 @@ class BaseConfig:
 
         Example of suffix: "-vars.pickle"
         """
-        return os.path.join(self.datadir, f"{self.subappname}{suffix}")
+        return os.path.join(self.datadir, f"{self.subappname}{self.dash_suffix_or_not(suffix)}")
 
     def get_welcome(self):
         slugtitle = f"Welcome to the '{self.subappname}' {self.suffix}"
@@ -250,7 +270,7 @@ class _WithHistory:
     @property
     def historypath(self):
         """Returns the path to the history file."""
-        return os.path.join(self.datadir, "history", f"{self.subappname}-{self.suffix}.history")
+        return os.path.join(self.datadir, "history", f"{self.subappname}{self.dath_suffix_or_not()}.history")
 
 
 class ClientConfig(ClientServerConfig, _WithHistory):
