@@ -53,6 +53,7 @@ class Intelligence(sl.WithClosers):
         self.master = master
         self.__logger = None
         self.__cfg = cfg
+        self.__flag_initialized = False
 
         self.name = a107.random_name()
         # print(f"AND A NEW INTELLIGENCE IS BORN: {self.name} ({self.__class__.__name__})--------------------------------------")
@@ -81,4 +82,11 @@ class Intelligence(sl.WithClosers):
                 and x[0] not in _SUPEREXCLUDED and x[0] not in self._excluded]
 
     async def initialize(self):
+        """Initializes. May be called only once."""
+        assert not self.__flag_initialized
         await self._on_initialize()
+
+    async def ensure_initialized(self):
+        """Initializes if not so yet."""
+        if not self.__flag_initialized:
+            await self.initialize()
