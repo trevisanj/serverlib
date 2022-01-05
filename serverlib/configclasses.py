@@ -270,7 +270,7 @@ class _WithHistory:
     @property
     def historypath(self):
         """Returns the path to the history file."""
-        return os.path.join(self.datadir, "history", f"{self.subappname}{self.dath_suffix_or_not()}.history")
+        return os.path.join(self.datadir, "history", f"{self.subappname}{self.dash_suffix_or_not()}.history")
 
 
 class ClientConfig(ClientServerConfig, _WithHistory):

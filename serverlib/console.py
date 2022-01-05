@@ -245,7 +245,10 @@ class Console(sl.WithCommands, sl.WithClosers):
                 with redirect_stdout(f):
                     do_print(False)
         else:
-            yoda("Strong in you the force is.", True)
+            yodanonsense = "Strong in you the force is."
+            if isinstance(ret, sl.Status) and ret.yoda:
+                yodanonsense = ret.yoda
+            yoda(yodanonsense, True)
             do_print(True)
 
 

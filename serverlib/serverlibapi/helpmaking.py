@@ -28,7 +28,7 @@ NOTFAV = " "
 class HelpItem:
     name: str
     oneliner: str
-    signature: inspect.Signature = None
+    signature: inspect.Signature= None
     docstring: str = None
     flag_fav: bool = False
 
