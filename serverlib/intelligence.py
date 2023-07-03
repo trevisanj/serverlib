@@ -43,10 +43,11 @@ class Intelligence(sl.WithClosers):
         if isinstance(self.master, sl.Server): return self.master
         if hasattr(self.master, "server"): return self.master.server
         return None
-        # elif isinstance(self.master, sl.Client): return None
-        # if not hasattr(self.master, "server"):
-        #     raise TypeError("self.master must either be a serverlib.Server or have a 'server' attribute")
-        # return self.master.server
+
+    @property
+    def client(self):
+        if isinstance(self.master, sl.Client): return self.master
+        return None
 
     def __init__(self, master=None, cfg=None):
         super().__init__()

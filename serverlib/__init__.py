@@ -12,6 +12,16 @@ from .tools import *
 from .basicservercommands import *
 from .pubsub import *
 from .embedding import *
+from .waiter import *
 
+# Whether to server-side log traceback when command raises exception (to help with debugging)
 flag_log_traceback = True
-waittime_retry = 1.
+
+# Time to wait before retrying. This value is "informed" by a raised Retry exception
+retry_waittime = 1.
+
+# Default configuration for serverlib.Waiter instances
+waiter_waittime = 0.5     # initial waiting time
+waiter_waittime_max = 30  # maximum waiting time
+waiter_maxtries = 10      # maximum number of attempts
+
