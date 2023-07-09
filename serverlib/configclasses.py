@@ -157,7 +157,7 @@ class BaseConfig:
             1. '<self.configpath>'
             2. './<self.configfilename>'
 
-        The order above makes local directory settings prioritary.
+        Both files will be used if present; settings in (2) may ovewrite settings in (1) above.
 
         Use case: one way to create a custom "client" directory is to:
             - run ```saccapoke.py```

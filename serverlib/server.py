@@ -119,6 +119,9 @@ class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
     async def __serverloop(self):
         async def execute_command(method, data):
             """(callable, list) --> (result or exception) (only raises BaseException)."""
+
+            # TODO detect non-async command
+
             try: ret = await method(*data[0], **data[1])
             except Exception as e:
                 if sl.flag_log_traceback:
@@ -146,9 +149,9 @@ class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
             if command:
                 data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
                 if not isinstance(data, list):
-                    exception = sl.StatementError(f"Data must unpickle to a list, not a {data.__class__.__name__}")
+                    exception = sl.StatementError(f"Data must unpickle to a [args, kwargs], not a {data.__class__.__name__}")
                 elif len(data) != 2 or type(data[0]) not in (list, tuple) or type(data[1]) != dict:
-                    exception = sl.StatementError("Data must unpickle to a structure like this: [[...], {...}]")
+                    exception = sl.StatementError("Data must unpickle to [args, kwargs]")
             return commandname, has_data, data, command, exception
 
         async def recv_send():

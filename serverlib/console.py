@@ -21,7 +21,6 @@ CST_STOPPED = 40  # stopped
 CST_CLOSED = 50
 
 class Console(sl.WithCommands, sl.WithClosers):
-    """BaseConsole class."""
 
     @property
     def state(self):
@@ -57,7 +56,8 @@ class Console(sl.WithCommands, sl.WithClosers):
     # INTERFACE
 
     async def execute(self, statement, *args, **kwargs):
-        """Executes statemen; tries special, then client-side, then server-side."""
+        if isinstance(statement, bytes):
+            raise TypeError("For bytes, use execute_bytes() instead!")
         await self._assure_initialized()
         self._parse_statement(statement, args, kwargs)
         return await self._do_execute()

@@ -99,7 +99,7 @@ def print_result(ret, logger=None, flag_colors=True):
         print(text)
 
     def handle_status(arg):
-        msg = arg.msg if not isinstance(arg.msg, (list, tuple)) else "\n".join(arg.msg)
+        msg = arg.__title if not isinstance(arg.__title, (list, tuple)) else "\n".join(arg.__title)
         if msg:
             print(f"{COLOR_HEADER}Status:{RESET} {a107.fancilyquoted(msg)}")
         print_result(arg.ret, logger, flag_colors)  # recursive call to print result in Status object

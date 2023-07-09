@@ -56,6 +56,7 @@ class Intelligence(sl.WithClosers):
         self.__cfg = cfg
         self.__flag_initialized = False
 
+        # TODO what is wrong with having a name argument?????????????????????????????????????
         self.name = a107.random_name()
         # print(f"AND A NEW INTELLIGENCE IS BORN: {self.name} ({self.__class__.__name__})--------------------------------------")
 
