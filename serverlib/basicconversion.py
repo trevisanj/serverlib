@@ -1,8 +1,10 @@
-__all__ = ["hopo2url", "cfg2str", "cfg2dict", "parse_statement", "StatementData"]
+"""
+Basic conversion routines
+"""
 
-import a107
-from dataclasses import dataclass
-from typing import List
+
+__all__ = ["hopo2url", "cfg2str", "cfg2dict"]
+
 
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):
@@ -65,39 +67,4 @@ def cfg2dict(cfg, flag_clean=True):
                 continue
             ret[attrname] = attr
 
-    return ret
-
-
-@dataclass
-class StatementData:
-    commandname: str
-    args: List
-    kwargs: List
-    outputfilename: str
-    flag_server: bool
-
-
-def parse_statement(statement, args_, kwargs_):
-    """Parses statement and returns StatementData"""
-    statement = statement.lstrip()
-    outputfilename = None
-    flag_server = False
-    try:
-        index = statement.index(" ")
-    except ValueError:
-        commandname, args, kwargs = statement, [], {}
-    else:
-        commandname = statement[:index]
-        args, kwargs = a107.str2args(statement[index+1:])
-    if commandname.startswith(">"):
-        commandname = commandname[1:]
-        flag_server = True
-    elif commandname == "?":
-        commandname = "help"
-    if args_: args.extend(args_)
-    if kwargs_: kwargs.update(kwargs_)
-    if args:
-        if isinstance(args[-1], str) and args[-1].startswith(">>>"):
-            outputfilename = args.pop()[3:]
-    ret = StatementData(commandname, args, kwargs, outputfilename, flag_server)
     return ret

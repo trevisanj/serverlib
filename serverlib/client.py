@@ -1,4 +1,5 @@
 import zmq, zmq.asyncio, pickle, a107, serverlib as sl
+from . import _api
 
 __all__ = ["Client"]
 
@@ -81,12 +82,13 @@ class Client(sl.Console):
     async def _get_prompt(self):
         if self.cfg.flag_ownidentity:
             return await super()._get_prompt()
-        return await self.execute_server("_get_prompt")
+        srvcfg = await self.execute_server("s_getd_cfg")
+        return srvcfg["subappname"]
 
     async def _get_welcome(self):
         if self.cfg.flag_ownidentity:
             return await super()._get_welcome()
-        return await self.execute_server("_get_welcome")
+        return await self.execute_server("s_get_welcome")
 
     async def _do_close(self):
         if self.__socket is not None:
@@ -106,9 +108,9 @@ class Client(sl.Console):
         return ret
 
     async def _do_help(self, refilter=None, fav=None, favonly=None):
-        helpdata_server = await self.execute_server("_help", refilter=refilter, fav=fav, favonly=favonly)
+        helpdata_server = await self.execute_server("s_help", refilter=refilter, fav=fav, favonly=favonly)
         cfg = self.cfg
-        helpdata = sl.make_helpdata(title=cfg.subappname,
+        helpdata = _api.make_helpdata(title=cfg.subappname,
                                     description=cfg.description,
                                     cmd=self.cmd,
                                     flag_protected=True,
@@ -122,7 +124,7 @@ class Client(sl.Console):
         if not self.cfg.flag_ownidentity:
             helpdata.title = helpdata_server.title
             helpdata.description = helpdata_server.description
-        text = sl.make_text(helpdata)
+        text = _api.make_text(helpdata)
         return text
 
 
@@ -131,7 +133,7 @@ class Client(sl.Console):
             return await super()._do_help_what(commandname)
         except sl.NotAClientCommand:
             # Note: it is not the best way to send the list of favourites to the server ... but whatever
-            return sl.format_method(await self.execute_server("_help", commandname, fav=self.cfg.fav))
+            return _api.format_method(await self.execute_server("s_help", commandname, fav=self.cfg.fav))
 
     # PRIVATE
 

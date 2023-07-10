@@ -1,9 +1,12 @@
 __all__ = ["Console"]
 
 import atexit, sys, signal, readline, tabulate, a107, time, serverlib as sl, os
+from dataclasses import dataclass
+from typing import List
 from contextlib import redirect_stdout
 from serverlib.consts import *
 from colored import attr
+from . import _api
 
 # I have to disable this, otherwise any input() result will be automatically added to history.
 readline.set_auto_history(False)
@@ -20,7 +23,13 @@ CST_LOOP = 30  # looping in command-line interface
 CST_STOPPED = 40  # stopped
 CST_CLOSED = 50
 
-class Console(sl.WithCommands, sl.WithClosers):
+class Console(_api.WithCommands, _api.WithClosers):
+    """
+    Console is the base class for serverlib.Client
+
+    This separates console functionality from the client-server model, allowing for creation of one-sided consoles,
+    such as pl3.WDB2Console
+    """
 
     @property
     def state(self):
@@ -31,8 +40,8 @@ class Console(sl.WithCommands, sl.WithClosers):
         return self.cfg.logger
 
     def __init__(self, cfg, cmd=None):
-        sl.WithCommands.__init__(self)
-        sl.WithClosers.__init__(self)
+        _api.WithCommands.__init__(self)
+        _api.WithClosers.__init__(self)
         self.__state = CST_INIT
         self.cfg = cfg
         self.flag_needs_to_reset_colors = False
@@ -109,7 +118,7 @@ class Console(sl.WithCommands, sl.WithClosers):
             return await self._do_help(refilter=refilter, fav=self.cfg.fav, favonly=favonly)
 
     async def close(self):
-        await sl.WithClosers.close(self)
+        await _api.WithClosers.close(self)
         self.__state = CST_CLOSED
 
     # OVERRIDABLE
@@ -128,16 +137,16 @@ class Console(sl.WithCommands, sl.WithClosers):
 
     async def _do_help(self, refilter=None, fav=None, favonly=False):
         cfg = self.cfg
-        helpdata = sl.make_helpdata(title=cfg.subappname,
-                                    description=cfg.description,
-                                    cmd=self.cmd, flag_protected=True,
-                                    refilter=refilter,
-                                    fav=fav,
-                                    favonly=favonly)
+        helpdata = _api.make_helpdata(title=cfg.subappname,
+                                      description=cfg.description,
+                                      cmd=self.cmd, flag_protected=True,
+                                      refilter=refilter,
+                                      fav=fav,
+                                      favonly=favonly)
         if not refilter and not favonly:
             specialgroup = await self._get_help_specialgroup()
             helpdata.groups = [specialgroup]+helpdata.groups
-        text = sl.make_text(helpdata)
+        text = _api.make_text(helpdata)
         return text
 
     def _handle_result(self, result):
@@ -147,21 +156,21 @@ class Console(sl.WithCommands, sl.WithClosers):
     async def _do_help_what(self, commandname):
         if commandname in self.metacommands:
 
-            return sl.format_method(sl.make_helpitem(self.metacommands[commandname], True, self.cfg.fav))
+            return _api.format_method(_api.make_helpitem(self.metacommands[commandname], True, self.cfg.fav))
         raise sl.NotAClientCommand(f"Not a client command: '{commandname}'")
 
     # PROTECTED (NOT OVERRIDABLE)
 
     async def _get_help_specialgroup(self):
         """Returns the help "special group"; called by Console and Client."""
-        specialgroup = sl.HelpGroup(title="Console specials", items=[
-            sl.HelpItem("?", "alias for 'help'"),
-            sl.HelpItem("exit", "exit console"),
-            sl.HelpItem("... >>>filename", "redirects output to file"), ])
+        specialgroup = _api.HelpGroup(title="Console specials", items=[
+            _api.HelpItem("?", "alias for 'help'"),
+            _api.HelpItem("exit", "exit console"),
+            _api.HelpItem("... >>>filename", "redirects output to file"), ])
         return specialgroup
 
     def _parse_statement(self, statement, args, kwargs):
-        self._statementdata = sl.parse_statement(statement, args, kwargs)
+        self._statementdata = _console_parse_statement(statement, args, kwargs)
         return self._statementdata
 
     async def _assure_initialized(self):
@@ -236,7 +245,7 @@ class Console(sl.WithCommands, sl.WithClosers):
         def do_print(flag_colors):
             ret_, flag_handled = self._handle_result(ret)
             ret__ = ret_ if flag_handled else ret
-            sl.print_result(ret__, self.logger, flag_colors)
+            _api.print_result(ret__, self.logger, flag_colors)
 
         outputfilename = self._statementdata.outputfilename
         if outputfilename:
@@ -269,14 +278,17 @@ def my_print_exception(e):
 
 
 class _EssentialConsoleCommands(sl.ConsoleCommands):
+    @sl.is_command
     async def help(self, what=None, favonly=False):
         """Gets general help or help on specific command."""
         return await self.master.help(what, favonly)
 
+    @sl.is_command
     async def favhelp(self, what=None, favonly=False):
         """Equivalent to "help favonly=True"."""
         return await self.help(favonly=True)
 
+    @sl.is_command
     async def fav(self, what):
         """Toggles favourite command."""
         fav = self.master.cfg.fav
@@ -287,9 +299,48 @@ class _EssentialConsoleCommands(sl.ConsoleCommands):
             fav.append(what)
         self.master.cfg.set("fav", fav)
 
+    @sl.is_command
     async def get_fav(self):
         """Return list of favourite commands."""
         return self.master.cfg.fav
 
+    @sl.is_command
     async def getd_lowstate(self):
         return sl.lowstate.__dict__
+
+
+def _console_parse_statement(statement, args_, kwargs_):
+    """Parses statement and returns StatementData"""
+    statement = statement.lstrip()
+    outputfilename = None
+    flag_server = False
+    try:
+        index = statement.index(" ")
+    except ValueError:
+        commandname, args, kwargs = statement, [], {}
+    else:
+        commandname = statement[:index]
+        args, kwargs = a107.str2args(statement[index+1:])
+    if commandname.startswith(">"):
+        commandname = commandname[1:]
+        flag_server = True
+    elif commandname == "?":
+        commandname = "help"
+    if args_: args.extend(args_)
+    if kwargs_: kwargs.update(kwargs_)
+    if args:
+        if isinstance(args[-1], str) and args[-1].startswith(">>>"):
+            outputfilename = args.pop()[3:]
+    ret = _StatementData(commandname, args, kwargs, outputfilename, flag_server)
+    return ret
+
+
+@dataclass
+class _StatementData:
+    commandname: str
+    args: List
+    kwargs: List
+    outputfilename: str
+    flag_server: bool
+
+

@@ -1,16 +1,22 @@
-"""Allows embedding an IPython inside the program as a working console or client.
+"""
+Allows embedding an IPython inside the program as a working console or client.
 
 This code is based on a107.console and replaces it.
+
+The purpose of this feature is to allow client to be used in ipython. However, as of 20230710, I don't know whether it
+is working or being used.
+
 """
 
-__all__ = ["embed_ipython"]
+__all__ = ["serverlib_embed_ipython"]
 
 import a107, signal, inspect, serverlib as sl
 
 
-async def embed_ipython(console, globalsdict, colors="linux", flag_close=True):
+async def serverlib_embed_ipython(console, globalsdict, colors="linux", flag_close=True):
     """
     Extracts commands to globalsdict and Embeds Ipython
+
     Args:
         console: serverlib.Console instance
         globalsdict: dictionary obtained (probably in main module) using globals()
@@ -18,7 +24,6 @@ async def embed_ipython(console, globalsdict, colors="linux", flag_close=True):
         flag_close: whether to close the console upon exit
 
     Actions performed:
-
         - modifies globalsdict to have all commands + a "print_help()" method
         - supresses Ctrl+Z. **You will have to type "exit"**. Don't worry, Yoda will tell you
     """
@@ -61,7 +66,7 @@ async def {methodname}({with_defaults}):
         globalsdict[metacommand.name] = metacommand.method
 
     if isinstance(console, sl.Client):
-        serverhelpdata = await console.execute_server("_help", flag_docstrings=True)
+        serverhelpdata = await console.execute_server("s_help", flag_docstrings=True)
         for group in serverhelpdata.groups:
             for item in group.items:
                 globalsdict[item.name] = servercommandfactory(console,

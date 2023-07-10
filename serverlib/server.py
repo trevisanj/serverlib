@@ -2,9 +2,9 @@
 
 __all__ = ["Server", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
-import pickle, os, signal, asyncio, random, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random
-from colored import fg, bg, attr
-from .basicservercommands import *
+import pickle, signal, asyncio, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random
+from colored import attr
+from . import _api
 
 
 # Server states
@@ -14,13 +14,78 @@ ST_LOOP = 30     # in main loop
 ST_STOPPED = 40  # stopped
 
 
-class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
+class _WithSleepers:
+
+    @property
+    def sleepers(self):
+        return self.__sleepers
+
+    def __init__(self):
+        self.__sleepers = {}  # {name: _Sleeper, ...}
+
+    def wake_up(self, sleepername=None):
+        """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
+        if sleepername is not None:
+            self.__sleepers[sleepername].flag_wake_up = True
+        else:
+            for sleeper in self.__sleepers.values(): sleeper.flag_wake_up = True
+
+    async def wait_a_bit(self):
+        """Unified way to wait for a bit, usually before retrying something that goes wront."""
+        await self.sleep(0.1)
+
+    async def sleep(self, waittime, name=None):
+        """Takes a nap that can be prematurely terminated with self.wake_up()."""
+        try:
+            logger = self.logger
+        except AttributeError:
+            logger = a107.get_python_logger()
+        my_debug = lambda s: logger.debug(
+            f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
+
+        async def ensure_new_name(name):
+            i = 0
+            while sleeper.name in self.__sleepers:
+                if name is not None:
+                    msg = f"Called {self.__class__.__name__}.sleep({waittime}, '{name}') when '{name}' is already sleeping!"
+                    raise RuntimeError(msg)
+                sleeper.name += (" " if i == 0 else "")+chr(random.randint(65, 65+25))
+                i += 1
+
+        if isinstance(waittime, sl.Retry): waittime = waittime.waittime
+        interval = min(waittime, 0.1)
+        sleeper = _Sleeper(waittime, name)
+        await ensure_new_name(name)
+        self.__sleepers[sleeper.name] = sleeper
+        slept = 0
+        try:
+            my_debug("💤💤💤")
+            while slept < waittime and not sleeper.flag_wake_up:
+                await asyncio.sleep(interval)
+                slept += interval
+        finally:
+            my_debug("⏰WAKE⏰UP!⏰")
+            try:
+                del self.__sleepers[sleeper.name]
+            except KeyError:
+                pass
+
+
+class _Sleeper:
+    def __init__(self, seconds, name=None):
+        self.seconds = seconds
+        self.name = a107.random_name() if name is None else name
+        self.task = None
+        self.flag_wake_up = False
+
+
+class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     """Server class.
 
     Args:
         cfg: ServerConfig
         cmd: instance or list of Servercommands
-        flag_basiccommands: whether to automatically attach the basic commands."""
+    """
 
     @property
     def logger(self):
@@ -34,17 +99,20 @@ class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
     def lo_ops(self):
         return self.__lo_ops
 
-    def __init__(self, cfg, cmd=None, flag_basiccommands=True):
-        sl.WithCommands.__init__(self)
-        sl.WithClosers.__init__(self)
-        sl.WithSleepers.__init__(self)
+    def __init__(self, cfg, cmd=None):
+        _api.WithCommands.__init__(self)
+        _api.WithClosers.__init__(self)
+        _WithSleepers.__init__(self)
+
         self.__state = ST_INIT
         self.cfg = cfg
         cfg.master = self
-        self.__lo_ops = None  # {methodname:
-        self._attach_cmd(_EssentialServerCommands())
-        if flag_basiccommands: self._attach_cmd(BasicServerCommands())
-        if cmd is not None: self._attach_cmd(cmd)
+        self.__lo_ops = None  # {methodname0: task0, ...}
+
+        self._attach_cmd(sl.BasicServerCommands())
+        if cmd is not None:
+            self._attach_cmd(cmd)
+
         self.__state = ST_ALIVE
 
     # ┌─┐┬  ┬┌─┐┬─┐┬─┐┬┌┬┐┌─┐  ┌┬┐┌─┐
@@ -57,13 +125,6 @@ class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
     # │ │└─┐├┤   │││├┤
     # └─┘└─┘└─┘  ┴ ┴└─┘
     # http://patorjk.com/software/taag/#p=display&f=Calvin%20S&t=use%20me
-
-    async def get_configuration(self):
-        """Returns tabulatable (rows, ["key", "value"] self.cfg + additional in-server information."""
-        # TODO return as dict, but create a nice visualization at the client side
-        _ret = self.cfg.to_dict()
-        ret = list(_ret.items()), ["key", "value"]
-        return ret
 
     async def run(self):
         # Automatically figures out all methods containing the word "loop" in them
@@ -124,7 +185,7 @@ class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
 
             try: ret = await method(*data[0], **data[1])
             except Exception as e:
-                if sl.flag_log_traceback:
+                if sl.lowstate.flag_log_traceback:
                     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
                 else: self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
                 ret = e
@@ -208,63 +269,3 @@ class Server(sl.WithCommands, sl.WithClosers, sl.WithSleepers):
             sl.lowstate.numsockets -= 1
             ctx.destroy()
             sl.lowstate.numcontexts -= 1
-
-
-class _EssentialServerCommands(sl.ServerCommands):
-    async def _get_welcome(self):
-        return self.master.cfg.get_welcome()
-
-    async def _get_name(self):
-        """Returns the server application name."""
-        return self.cfg.appname
-
-    async def _get_subappname(self):
-        """Returns the server subappname."""
-        return self.cfg.subappname
-
-    async def _get_prompt(self):
-        """Returns what the server thinks that should be the client prompt."""
-        return self.cfg.subappname
-
-    async def _poke(self):
-        """Prints and returns the server subappname (useful to identify what is running in a terminal)."""
-        # print(f"👉 {self.cfg.subappname}")  # 👈")
-        print(f"{fg('white')}{attr('bold')}{self.cfg.subappname}{attr('reset')} 👈")
-        return self.cfg.subappname
-
-    async def _help(self, what=None, flag_docstrings=False, refilter=None, fav=None, favonly=False):
-        """Gets summary of available server commands or help on specific command.
-
-        Args:
-            what: specific command
-            flag_docstrings: whether to include docstrings in help data
-            refilter: regular expression. If passed, will filter commands containing this expression
-            fav: favourites list
-            favonly: flag, whether to include only favourite items
-
-        Returns:
-            serverlib.HelpData or serverlib.HelpItem
-        """
-        if what is None:
-            cfg = self.master.cfg
-            helpdata = sl.make_helpdata(title=cfg.subappname,
-                                        description=cfg.description,
-                                        cmd=self.master.cmd,
-                                        flag_protected=True,
-                                        flag_docstrings=flag_docstrings,
-                                        refilter=refilter,
-                                        fav=fav,
-                                        favonly=favonly)
-            return helpdata
-        else:
-            if what not in self.master.metacommands:
-                raise ValueError("Invalid method: '{}'".format(what))
-            helpitem = sl.make_helpitem(self.master.metacommands[what], True, fav)
-            return helpitem
-
-    async def _s_getd_lowstate(self):
-        """Returns serverlib's "lowstate" for server
-
-        As opposed to client-side "getd_lowstate()"
-        """
-        return sl.lowstate.__dict__

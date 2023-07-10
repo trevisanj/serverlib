@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import *
 from colored import fg, bg, attr
 import inspect, re, ansiwrap, math, shutil
-from .metacommand import *
+
 
 # ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
 # Text-rendering configuration

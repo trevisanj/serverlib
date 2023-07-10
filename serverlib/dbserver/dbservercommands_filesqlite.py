@@ -1,15 +1,20 @@
-import serverlib as sl, a107
 __all__ = ["DBServerCommands_FileSQLite"]
 
 
-class DBServerCommands_FileSQLite(sl.ServerCommands):
+import serverlib as sl, a107
+from serverlib import is_command
+from .dbservercommands import *
+
+
+class DBServerCommands_FileSQLite(DBServerCommands):
     """"Low-level" access to FileSQLite object."""
 
-    async def commit(self):
+    async def s_commit(self):
         """Commits the current transaction."""
         self.dbfile.commit()
 
-    async def execute(self, statement, bindings=(), rowformat="dict", flag_commit=False):
+    @is_command
+    async def s_execute(self, statement, bindings=(), rowformat="dict", flag_commit=False):
         """Executes SQLite statement.
 
         Args:
@@ -25,7 +30,8 @@ class DBServerCommands_FileSQLite(sl.ServerCommands):
         if flag_commit: self.dbfile.commit()
         return _format_cursor(cursor, rowformat)
 
-    async def executemany(self, statement, bindings=(), flag_commit=False):
+    @is_command
+    async def s_executemany(self, statement, bindings=(), flag_commit=False):
         """Executes SQLite statement repeatedly for each row in bindings.
 
         Args:
@@ -38,15 +44,18 @@ class DBServerCommands_FileSQLite(sl.ServerCommands):
         self.dbfile.executemany(statement, bindings)
         if flag_commit: self.dbfile.commit()
 
-    async def get_scalar(self, *args, **kwargs):
+    @is_command
+    async def s_get_scalar(self, *args, **kwargs):
         """Executes statement that presumably fetches one row containing one column."""
         return self.dbfile.get_scalar(*args, **kwargs)
 
-    async def get_singlecolumn(self, *args, **kwargs):
+    @is_command
+    async def s_get_singlecolumn(self, *args, **kwargs):
         """Executes statement that presumably feches one column per row."""
         return self.dbfile.get_singlecolumn(*args, **kwargs)
 
-    async def get_singlerow(self, statement, bindings=(), rowformat="dict"):
+    @is_command
+    async def s_get_singlerow(self, statement, bindings=(), rowformat="dict"):
         """Executes statement that presumably feches one row only. **Does** raise if rowcount != 1"""
         _ret = self.dbfile.execute(statement, bindings).fetchall()
         if len(_ret) != 1:
@@ -54,15 +63,18 @@ class DBServerCommands_FileSQLite(sl.ServerCommands):
         ret = _format_cursor(_ret, rowformat)[0]
         return ret
 
-    async def describe(self, tablename, rowformat="dict"):
+    @is_command
+    async def s_describe(self, tablename, rowformat="dict"):
         """Making up for the lack of SQL "describe" command."""
         return _format_cursor(self.dbfile.describe(tablename), rowformat)
 
-    async def show_tables(self, rowformat="dict"):
+    @is_command
+    async def s_show_tables(self, rowformat="dict"):
         """Making up for the lack of SQL "show tables" statement."""
         return _format_cursor(self.dbfile.show_tables(), rowformat)
 
-    async def create_database(self, flag_overwrite=False):
+    @is_command
+    async def s_create_database(self, flag_overwrite=False):
         """Creates database if it does not exist or if forced overwriting. **Careful**"""
         flag_overwrite = a107.to_bool(flag_overwrite)
         self.dbfile.create_database(flag_overwrite=flag_overwrite)
@@ -76,7 +88,3 @@ def _format_cursor(cursor, rowformat):
     else:
         raise ValueError(f"Invalid row format: {rowformat}")
     return ret
-
-
-
-

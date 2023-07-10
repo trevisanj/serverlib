@@ -1,9 +1,10 @@
-__all__ = ["Intelligence",]
+__all__ = ["Intelligence"]
 
-import a107, serverlib as sl, asyncio, inspect
+import a107, serverlib as sl, inspect
+from . import _api
 
 
-class Intelligence(sl.WithClosers):
+class Intelligence(_api.WithClosers):
     """
     Intelligence base class: master, server, logger, cfg, initialize(), close(), get_meta() etc.
 
@@ -12,8 +13,6 @@ class Intelligence(sl.WithClosers):
 
     # Custom title for this class, e.g. appearing as the title of a group of commands in help text
     _title = None
-    # Methods that shouldn't be exposed as commands
-    _excluded = []
 
     @property
     def title(self):
@@ -69,19 +68,18 @@ class Intelligence(sl.WithClosers):
 
     def get_meta(self, flag_protected=True):
         """Creates list of MetaCommand's based on own methods, which are filtered according to get_methods() rules."""
-        return [sl.MetaCommand(method) for method in self.get_methods(flag_protected)]
+        return [_api.MetaCommand(method) for method in self.get_methods(flag_protected)]
 
     def get_methods(self, flag_protected=False):
         """Return list of methods according to filter rules."""
 
-        _SUPEREXCLUDED = ("initialize", "close", "get_methods", "get_meta")
         return [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
                 if "__" not in x[0]
                 and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer",
                                          "_i_",  # #convention for internal commands not to be picked up by get_methods()
                                          ))
                 and (flag_protected or not x[0].startswith("_"))
-                and x[0] not in _SUPEREXCLUDED and x[0] not in self._excluded]
+                and hasattr(x[1], "is_command") and x[1].is_command]
 
     async def initialize(self):
         """Initializes. May be called only once."""
