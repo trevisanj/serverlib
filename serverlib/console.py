@@ -13,9 +13,7 @@ readline.set_auto_history(False)
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
-TIMEOUT = 30000  # miliseconds to wait until server replies
-
-# BaseConsole states
+# Console states
 CST_INIT = 0  # still in __init__()
 CST_ALIVE = 10  # passed __init__()
 CST_INITIALIZED = 20  # inited commands
@@ -47,7 +45,6 @@ class Console(_api.WithCommands, _api.WithClosers):
         self.flag_needs_to_reset_colors = False
         self._attach_cmd(_EssentialConsoleCommands())
         if cmd is not None: self._attach_cmd(cmd)
-        self.__ctx, self.__socket = None, None
         self.__outputfilename = None
         self.__state = CST_ALIVE
 
@@ -73,6 +70,28 @@ class Console(_api.WithCommands, _api.WithClosers):
 
     async def run(self):
         """Will run client and automatically exit the program. Intercepts Ctrl+C and Ctrl+Z."""
+
+        async def execute_in_loop(st):
+            """Executes and prints result."""
+
+            def blueyoda(e):
+                yoda("Try not -- do it you must.", False)
+                my_print_exception(e)
+
+            try:
+                ret = await self.execute(st)
+            except (sl.StatementError, sl.NotAClientCommand) as e:
+                blueyoda(e)
+            except Exception as e:
+                blueyoda(e)
+                if hasattr(e, "from_server"):
+                    pass
+                else:
+                    a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
+            else:
+                self.__print_result(ret)
+
+
         await self._assure_initialized()
         self.__intercept_exit()
         self.__set_historylength()
@@ -93,7 +112,7 @@ class Console(_api.WithCommands, _api.WithClosers):
                 elif st == "exit":
                     break
                 else:
-                    await self.__execute_in_loop(st)
+                    await execute_in_loop(st)
         except KeyboardInterrupt:
             pass
         finally:
@@ -127,7 +146,7 @@ class Console(_api.WithCommands, _api.WithClosers):
         pass
     
     async def _do_execute(self):
-        return await self.__execute_console()
+        return await self._execute_console()
 
     async def _get_prompt(self):
         return self.cfg.subappname
@@ -182,7 +201,7 @@ class Console(_api.WithCommands, _api.WithClosers):
 
     # PRIVATE
 
-    async def __execute_console(self):        
+    async def _execute_console(self):
         data = self._statementdata
         if not data.commandname in self.metacommands:
             raise sl.NotAClientCommand(f"Not a client command: '{data.commandname}'")
@@ -193,23 +212,6 @@ class Console(_api.WithCommands, _api.WithClosers):
         else:
             ret = method(*data.args, **data.kwargs)
         return ret
-
-    async def __execute_in_loop(self, st):
-        """Executes and prints result."""
-
-        def blueyoda(e):
-            yoda("Try not -- do it you must.", False)
-            my_print_exception(e)
-        try:
-            ret = await self.execute(st)
-        except (sl.StatementError, sl.NotAClientCommand) as e:
-            blueyoda(e)
-        except Exception as e:
-            blueyoda(e)
-            if hasattr(e, "from_server"): pass
-            else: a107.log_exception_as_info(self.logger, e, f"Error executing statement '{st}'\n")
-        else:
-            self.__print_result(ret)
 
     def __intercept_exit(self):
         # This one gets called at Ctrl+C, but ...

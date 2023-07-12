@@ -259,7 +259,7 @@ class ServerConfig(ClientServerConfig):
     defaulthost = "*"
     default_flag_log_file = True
 
-    def __init__(self, *args, sleepinterval=0.001, **kwargs):
+    def __init__(self, *args, sleepinterval=0.01, **kwargs):
         super().__init__(*args, **kwargs)
         self.sleepinterval = sleepinterval
 

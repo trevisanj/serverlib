@@ -118,7 +118,7 @@ def make_help(title, description, cmd, flag_protected=True, refilter=None, fav=N
     return text
 
 
-def make_text(helpdata, numcolumns=None, preferredcolumnwidth=120, spacer=" | "):
+def make_text(helpdata, numcolumns=None, preferredcolumnwidth=90, spacer=" | "):
     """
     Creates help text (string)
 
@@ -145,7 +145,7 @@ def make_text(helpdata, numcolumns=None, preferredcolumnwidth=120, spacer=" | ")
     if numcolumns is None:
         s = len(spacer)
         ROUNDBREAK = 2  # will make 2.6 round to 2, not to 3 etc.
-        numcolumns = int(round((terminalwidth+s)/(preferredcolumnwidth+s)*ROUNDBREAK)/ROUNDBREAK)
+        numcolumns = max(1, int(round((terminalwidth+s)/(preferredcolumnwidth+s)*ROUNDBREAK)/ROUNDBREAK))
     columnwidth = int((terminalwidth+s*(1-numcolumns))/numcolumns)
 
     methodlen = max([max([len(item.name) for item in helpgroup.items]+[0]) for helpgroup in helpdata.groups if len(helpgroup) > 0]+[0])

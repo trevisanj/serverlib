@@ -20,6 +20,9 @@ class _LowState:
     # CONFIGURATION
     # -------------
 
+    # client timeout in miliseconds
+    timeout = 30000
+
     # Whether to server-side log traceback when command raises exception (to help with debugging)
     flag_log_traceback: bool = True
 
