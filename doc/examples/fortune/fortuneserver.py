@@ -1,37 +1,6 @@
 #!/usr/bin/env python
 """A fucked-up fortune teller with sentences based on my online therapy sessions at BetterHelp."""
-import serverlib, a107, argparse, random as ra, textwrap, asyncio
-
-
-class FortuneCommands(serverlib.ServerCommands):
-    def __init__(self, *args, **kwargs):
-
-        def genericcommand(topic):
-            async def about_topic(self):
-                return "\n".join(textwrap.wrap(ra.choice(FORTUNES[topic]), 80))
-
-            about_topic.__doc__ = f"Tells fortune on '{topic}' topic."
-            about_topic.__name__ = topic
-            bound_method = about_topic.__get__(self, self.__class__)
-            ret = bound_method
-            return ret
-
-
-        for topic in FORTUNES.keys():
-            method = genericcommand(topic)
-            setattr(self, topic, method)
-
-        super().__init__(*args, **kwargs)
-
-
-def main(args):
-    cfg = serverlib.ServerConfig(appname="fortune",
-                                 host=args.host,
-                                 port=args.port,
-                                 flag_log_console=True,
-                                 description=__doc__)
-    server = serverlib.Server(cfg, cmd=FortuneCommands())
-    asyncio.run(server.run())
+import serverlib as sl, a107, argparse, random as ra, textwrap, asyncio
 
 
 FORTUNES = {
@@ -65,10 +34,35 @@ FORTUNES = {
 }
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=a107.SmartFormatter)
-    parser.add_argument("--host", type=str, help="host", default=None)
-    parser.add_argument('port', type=int, help='port', nargs="?", default=6666)
+class FortuneCommands(sl.ServerCommands):
+    def __init__(self, *args, **kwargs):
 
-    args = parser.parse_args()
-    main(args)
+        def genericcommand(topic):
+
+            # This decorator is important, so the client will not see the command
+            @sl.is_command
+            async def about_topic(self):
+                return "\n".join(textwrap.wrap(ra.choice(FORTUNES[topic]), 80))
+
+            about_topic.__doc__ = f"Tells fortune on '{topic}' topic."
+            # Command name will start with "f_"
+            about_topic.__name__ = f"f_{topic}"
+            bound_method = about_topic.__get__(self, self.__class__)
+            ret = bound_method
+            return ret
+
+
+        for topic in FORTUNES.keys():
+            method = genericcommand(topic)
+            setattr(self, topic, method)
+
+        super().__init__(*args, **kwargs)
+
+
+if __name__ == "__main__":
+    cfg = sl.ServerConfig(appname="fortune",
+                                 port=6666,
+                                 flag_log_console=True,
+                                 description=__doc__)
+    server = sl.Server(cfg, cmd=FortuneCommands())
+    sl.cli_server(server)

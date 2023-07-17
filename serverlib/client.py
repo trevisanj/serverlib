@@ -7,6 +7,8 @@ __all__ = ["Client"]
 class Client(sl.Console):
     """Client class."""
 
+    what = "client"
+
     @property
     def socket(self):
         self.__assure_socket()
@@ -20,7 +22,7 @@ class Client(sl.Console):
 
         # Temporary timeout to be used only once when server command is executed
         # It is reset by any of the execute*() methods
-        self.__temporarytimeout = None
+        self.temporarytimeout = None
 
         self.__ctx, self.__socket = None, None
 
@@ -53,6 +55,7 @@ class Client(sl.Console):
             await self._assure_initialized()
             self._parse_statement(statement, args, kwargs)
             return await self.__execute_server()
+
         finally:
             self.temporarytimeout = None
 
@@ -66,11 +69,19 @@ class Client(sl.Console):
             ret: either result or exception raised on the server (does not raise)
         """
         try:
+            await self._assure_initialized()
             return await self.__execute_bytes(bst)
         finally:
             self.temporarytimeout = None
 
     # OVERRIDEN
+
+    async def _initialize_client(self):
+        self.__assure_socket()
+        srvcfg = await self.__execute_server_no_init("s_getd_cfg")
+        if self.cfg.subappname != srvcfg["subappname"]:
+            raise sl.MismatchError(f'Client x Server subappname mismatch '
+                                   f'(\'{self.cfg.subappname}\' x \'{srvcfg["subappname"]}\')')
 
     async def _get_prompt(self):
         if self.cfg.flag_ownidentity:
@@ -93,7 +104,7 @@ class Client(sl.Console):
         flag_try_server = False
         try:
             ret = await super()._do_execute()
-        except sl.NotAClientCommand:
+        except sl.NotAConsoleCommand:
             # Note: I don't want to raise another exception inside here; that's why I use this flag instead
             flag_try_server = True
         if flag_try_server:
@@ -124,7 +135,7 @@ class Client(sl.Console):
     async def _do_help_what(self, commandname):
         try:
             return await super()._do_help_what(commandname)
-        except sl.NotAClientCommand:
+        except sl.NotAConsoleCommand:
             # Note: it is not the best way to send the list of favourites to the server ... but whatever
             return _api.format_method(await self.execute_server("s_help", commandname, fav=self.cfg.fav))
 
@@ -137,6 +148,8 @@ class Client(sl.Console):
         self.__set_timeout(self.timeout)
         print(f"Connecting {self.name}, ``{self.cfg.subappname}(client)'', to {self.cfg.url} ...")
         self.__socket.connect(self.cfg.url)
+
+
 
     def __set_timeout(self, timeout):
         self.__assure_socket()
@@ -153,6 +166,11 @@ class Client(sl.Console):
         if self.__socket is None:
             self.__make_socket()
 
+    async def __execute_server_no_init(self, statement, *args, **kwargs):
+        """Executes command on server without initialization check."""
+        self._parse_statement(statement, args, kwargs)
+        return await self.__execute_server()
+
     async def __execute_server(self):
         data = self._statementdata
         bst = data.commandname.encode()+b" "+pickle.dumps([data.args, data.kwargs])
@@ -166,7 +184,6 @@ class Client(sl.Console):
                 raise ret
             return ret
 
-        await self._assure_initialized()
         flag_temporarytimeout = self.temporarytimeout is not None
         try:
             if flag_temporarytimeout:

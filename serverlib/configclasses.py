@@ -3,7 +3,7 @@
 __all__ = ["BaseConfig", "ServerConfig", "ClientConfig", "ConsoleConfig"]
 
 import os, a107, configobj, serverlib as sl, random
-from .consts import KEBABWIDTH
+from .serverlibconfiguration import KEBABWIDTH
 
 class BaseConfig:
     """Common functionality for ClientConfig and ServerConfig.

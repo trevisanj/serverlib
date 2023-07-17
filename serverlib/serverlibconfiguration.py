@@ -1,9 +1,22 @@
-"""
-serverlib's global variables
-"""
-__all__ = ["lowstate"]
-
+from colored import fg, bg, attr
+import tabulate
 from dataclasses import dataclass
+
+tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
+
+
+COLOR_OKGREEN = fg("green")
+COLOR_FAIL = fg("red")
+COLOR_ERROR = fg("light_red")
+COLOR_FROM_SERVER = fg("black")+bg("dark_red_2")
+COLOR_HAPPY = fg("light_green")
+COLOR_SAD = fg("blue")
+COLOR_INPUT = fg("orange_1")
+COLOR_HEADER = fg("white")
+
+RESET = attr("reset")
+
+KEBABWIDTH = 100
 
 
 @dataclass
@@ -40,6 +53,8 @@ class _LowState:
     numsockets: int = 0
     numcontexts: int = 0
 
-
-
 lowstate = _LowState()
+
+
+del fg, bg, attr, tabulate, dataclass
+

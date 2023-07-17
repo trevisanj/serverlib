@@ -2,10 +2,11 @@
 
 __all__ = ["print_result", "result2str"]
 
-import tabulate, a107, serverlib as sl, textwrap, re, pl3, io
-from serverlib.consts import *
+import tabulate, a107, textwrap, re, pl3, io
+from serverlib.serverlibconfiguration import *
 from colored import fg, bg, attr
 from contextlib import redirect_stdout
+import serverlib as sl
 
 
 _powertabulatemap = [
@@ -48,6 +49,8 @@ def _detect_girafales(s):
 
 
 def print_result(ret, logger=None, flag_colors=True):
+    from ._api import helpmaking
+
     print_tabulated = a107.print_girafales if flag_colors else print
 
     def print_header(k, level):
@@ -95,7 +98,7 @@ def print_result(ret, logger=None, flag_colors=True):
             handle_default(arg)
 
     def handle_helpdata(arg):
-        text = sl.make_text(arg)
+        text = helpmaking.make_text(arg)
         print(text)
 
     def handle_status(arg):
@@ -125,7 +128,7 @@ def print_result(ret, logger=None, flag_colors=True):
         handle_list(ret)
     elif isinstance(ret, dict):
         handle_dict(ret)
-    elif isinstance(ret, sl.HelpData):
+    elif isinstance(ret, helpmaking.HelpData):
         handle_helpdata(ret)
     elif isinstance(ret, sl.Status):
         handle_status(ret)

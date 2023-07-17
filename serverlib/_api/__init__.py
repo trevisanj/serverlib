@@ -8,4 +8,3 @@ from .withclosers import *
 from .withcommands import *
 from .metacommand import *
 from .helpmaking import *
-from .print_result import *

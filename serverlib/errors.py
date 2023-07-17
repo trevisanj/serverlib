@@ -2,7 +2,7 @@ class StatementError(Exception):
     pass
 
 
-class NotAClientCommand(Exception):
+class NotAConsoleCommand(Exception):
     pass
 
 
@@ -14,3 +14,7 @@ class Retry(Exception):
         super().__init__(*args, **kwargs)
         # Use to hint how much time should pass before retrying
         self.waittime = waittime if waittime is not None else sl.lowstate.retry_waittime
+
+
+class MismatchError(Exception):
+    pass
