@@ -45,6 +45,7 @@ class AgentServer(sl.DBServer):
 
     # PRIVATE ZONE ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
 
+    @sl.is_loop
     async def __agentsloop(self):
         # This is the loop which spawns/kills agents
 
@@ -62,7 +63,7 @@ class AgentServer(sl.DBServer):
             for newname in newnames:
                 if newname not in existingnames:
                     mydebug(f"Spawning agent '{newname}'")
-                    self.__agents[newname] = asyncio.create_task(self.__agentlo_op(newname))
+                    self.__agents[newname] = asyncio.create_task(self.__agentloop(newname))
 
         dbclient = self.get_dbclient()
         try:
@@ -77,7 +78,7 @@ class AgentServer(sl.DBServer):
             for agent in agents: agent.cancel()
             mydebug(f"{self.__class__.__name__}.__masterloop() on its 'finally:' END")
 
-    async def __agentlo_op(self, agentname):
+    async def __agentloop(self, agentname):
         # Each agent lives inside one call to this method
         # I wrote lo_op because otherwise this method will be picked up by serverlib.Server
 

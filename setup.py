@@ -8,8 +8,8 @@ def find_scripts(pkgs):
         ret.extend(glob(pkgname + '/scripts/*.py'))
     return ret
 
-
 pkgs = find_packages()
+
 scripts = find_scripts(pkgs)
 
 NAME = "serverlib"
@@ -17,7 +17,7 @@ setup(
     name=NAME,
     packages=find_packages(),
     include_package_data=True,
-    version='21.07.16.0',
+    version='21.7.16.0',
     license='GNU GPLv3',
     platforms='any',
     description='Package to develop write asynchronoys servers and clients using 0MQ',

@@ -2,8 +2,10 @@
 
 __all__ = ["Server", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
 
-import pickle, signal, asyncio, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random
+import pickle, signal, asyncio, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random, inspect
 from colored import attr
+from dataclasses import dataclass
+from typing import Any
 from . import _api
 
 
@@ -35,7 +37,10 @@ class _WithSleepers:
         await self.sleep(0.1)
 
     async def sleep(self, waittime, name=None):
-        """Takes a nap that can be prematurely terminated with self.wake_up()."""
+        """Takes a nap
+
+         Q: Why not asyncio.sleep()?
+         A: Because this can be prematurely terminated with self.wake_up()."""
         try:
             logger = self.logger
         except AttributeError:
@@ -64,7 +69,7 @@ class _WithSleepers:
                 await asyncio.sleep(interval)
                 slept += interval
         finally:
-            my_debug("⏰WAKE⏰UP!⏰")
+            my_debug("⏰ Wake up!")
             try:
                 del self.__sleepers[sleeper.name]
             except KeyError:
@@ -77,6 +82,36 @@ class _Sleeper:
         self.name = a107.random_name() if name is None else name
         self.task = None
         self.flag_wake_up = False
+
+
+@dataclass
+class _LoopData:
+    """Data class to store relevant information about a "loop"."""
+
+    @property
+    def methodname(self):
+        return self.method.__name__
+
+    @property
+    def flag_error(self):
+        return self.exception is not None
+
+    @property
+    def errormessage(self):
+        if self.exception is None:
+            return ""
+        return a107.str_exc(self.exception)
+
+    # awaitable method with the @is_loop decorator
+    method: Any
+    # asyncio.Task
+    task: Any = None
+    # exception in case of error
+    exception: BaseException = None
+    # marked to die, like Guts
+    marked: bool = False
+    # method result after awaited on
+    result: Any = None
 
 
 class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
@@ -96,10 +131,10 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         return self.__state
 
     @property
-    def lo_ops(self):
-        return self.__lo_ops
+    def loops(self):
+        return self.__loops
 
-    def __init__(self, cfg, cmd=None):
+    def __init__(self, cfg, cmd=None, subservers=None):
         _api.WithCommands.__init__(self)
         _api.WithClosers.__init__(self)
         _WithSleepers.__init__(self)
@@ -107,11 +142,20 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         self.__state = ST_INIT
         self.cfg = cfg
         cfg.master = self
-        self.__lo_ops = None  # {methodname0: task0, ...}
+        self.__loops = None  # {methodname0: task0, ...}
 
         self._attach_cmd(sl.BasicServerCommands())
         if cmd is not None:
             self._attach_cmd(cmd)
+
+        # todo changed my mind about implementing this for the moment
+        self.__subservers = []
+        if subservers is not None:
+            if isinstance(subservers, sl.SCPair):
+                self.__subservers.append(subservers)
+            else:
+                for item in subservers:
+                    self.__subservers.append(item)
 
         self.__state = ST_ALIVE
 
@@ -119,7 +163,8 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤
     # └─┘ └┘ └─┘┴└─┴└─┴─┴┘└─┘  ┴ ┴└─┘
 
-    async def _on_initialize(self): pass
+    async def _on_initialize(self):
+        pass
 
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
     # │ │└─┐├┤   │││├┤
@@ -127,67 +172,101 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     # http://patorjk.com/software/taag/#p=display&f=Calvin%20S&t=use%20me
 
     async def run(self):
-        # Automatically figures out all methods containing the word "loop" in them
-        attrnames = [attrname for attrname in dir(self) if "loop" in attrname]
-        self.logger.debug(f"About to await on {attrnames}")
+        async def loopcoro(loopdata):
+            """
+            This is an envelope around a server loop method
 
-        async def loopcoro(attrname):
-            # - Waits until main loop is ready (if secondary loop)
-            # - Catches cancellation: I am sort of figuring out concurrency still, and want to see exactly how each loop
-            #   ends, and what are the best practices
-            awaitable = getattr(self, attrname)()
+            - Waits until main loop is ready (if secondary loop)
+            - Catches cancellation: I am sort of figuring out concurrency still, and want to see exactly how each loop
+              ends, and what are the best practices
+
+            Returns:
+                either the result of the method or an exception that was raised
+            """
+
+            awaitable = loopdata.method()
             try:
-                if not attrname.endswith("__serverloop"):  # secondary loop waits until primary loop is ready
-                    while self.state != sl.ST_LOOP: await asyncio.sleep(0.01)
+                if not loopdata.methodname.endswith("__serverloop"):  # secondary loop waits until primary loop is ready
+                    while self.state != sl.ST_LOOP:
+                        await asyncio.sleep(0.01)
                 return await awaitable
+
             except BaseException as e:
-                self.__lo_ops[attrname].errormessage = a107.str_exc(e)
-                if isinstance(e, asyncio.CancelledError): return e
+                loopdata.exception = e
+                if isinstance(e, asyncio.CancelledError):
+                    return e
+
                 # BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE
                 # Here is the unified place to decide what to do with high-bug-probability errors
-                middles = [f"Crash in {self.__class__.__name__}.{attrname}()", "Loops and errors:"]
-                middles.extend([f"  {'🦓' if v.errormessage else '🐱'} {k}: {v.errormessage}" for k, v in self.__lo_ops.items()])
+                middles = [f"Crash in {self.__class__.__name__}.{loopdata.methodname}()", "Loops and errors:"]
+                middles.extend([f"  {'🦓' if loopdata.errormessage else '🐱'} {loopdata.methodname}: "
+                                f"{loopdata.errormessage}"
+                                for loopdata in self.__loops])
                 for s in middles:
                     print(f"🐛🐛🐛 {attr('bold')}{s}{attr('reset')}")
                 traceback.print_exc()
+
+                # todo apparently I decided to crash the whole server if any of the loop methods crash
                 raise
 
-        def create_task(attrname):
-            task = asyncio.create_task(loopcoro(attrname), name=attrname)
-            task.errormessage = None
-            task.marked = False  # marked to die, like Guts
-            return task
+        def create_loopdata(method):
+            loopdata = _LoopData(method)
+            loopdata.task = asyncio.create_task(loopcoro(loopdata), name=loopdata.methodname)
+            return loopdata
 
-        self.__lo_ops = {attrname: create_task(attrname) for attrname in attrnames}
-        results = await asyncio.gather(*self.__lo_ops.values(), return_exceptions=True)
+        # def create_task_subserver(scpair):
+        #     task = asyncio.create_task(loopcoro(attrname), name=attrname)
+        #     task.errormessage = None
+        #     task.marked = False  # marked to die, like Guts
+        #     return task
+
+        # Automatically figures out all "loops"
+        loopmethods = [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
+                       if hasattr(x[1], "is_loop") and x[1].is_loop]
+        for method in loopmethods:
+            assert inspect.iscoroutinefunction(method), f"Method `{method.__name__}()` is not awaitable"
+
+        # debug
+        self.logger.debug(f"About to await on {[x.__name__ for x in loopmethods]}")
+
+        # runs everything
+        self.__loops = [create_loopdata(method) for method in loopmethods]
+        results = await asyncio.gather(*[loopdata.task for loopdata in self.__loops], return_exceptions=True)
+
+        # assigns each result to respective LoopData object
+        for loopdata, result in zip(self.__loops, results):
+            loopdata.result = result
+
+        # debug
         self.logger.debug(f"*** Server {self.cfg.subappname} -- how the story ended: ***")
-        for name, result in zip(attrnames, results):
-            if isinstance(result, BaseException): result = a107.str_exc(result)
-            self.logger.debug(f"{name}(): {result}")
+        for loopdata in self.__loops:
+            result = a107.str_exc(loopdata.result) if isinstance(loopdata.result, BaseException) else loopdata.result
+            self.logger.debug(f"{loopdata.methodname}(): {result}")
 
     def stop(self):
-        if self.__lo_ops is not None:
-            for task in self.__lo_ops.values():
-                if not task.marked:
-                    task.marked = True
+        if self.__loops is not None:
+            for loopdata in self.__loops:
+                if not loopdata.marked:
+                    loopdata.marked = True
                     # print(f"stop() cancelling {task}")
-                    task.cancel()
+                    loopdata.task.cancel()
 
     # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
     # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
     # ┴─┘└─┘┴ ┴ └┘ └─┘  ┴ ┴└─┘  ┴ ┴┴─┘└─┘┘└┘└─┘
 
+    @sl.is_loop
     async def __serverloop(self):
         async def execute_command(method, data):
             """(callable, list) --> (result or exception) (only raises BaseException)."""
 
-            # TODO detect non-async command
-
-            try: ret = await method(*data[0], **data[1])
+            try:
+                ret = await method(*data[0], **data[1])
             except Exception as e:
                 if sl.lowstate.flag_log_traceback:
                     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
-                else: self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
+                else:
+                    self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
                 ret = e
             return ret
 
@@ -195,17 +274,22 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             """bytes --> (commandname, has_data, data, command, exception) (str, bool, bytes, callable, StatementError/None)."""
             bdata, data, command, exception = b"", [], None, None
             # Splits statement
-            try: idx = st.index(b" ")
-            except ValueError: commandname = st.decode()
-            else: commandname, bdata = st[:idx].decode(), st[idx+1:]
+            try:
+                idx = st.index(b" ")
+            except ValueError:
+                commandname = st.decode()
+            else:
+                commandname, bdata = st[:idx].decode(), st[idx+1:]
             has_data = len(bdata) > 0
             # Figures out method
-            try: command = self.metacommands[commandname]
+            try:
+                command = self.metacommands[commandname]
             except KeyError:
                 message = f"Command is non-existing: '{commandname}'"
                 self.logger.info(message)
                 exception = sl.StatementError(message)
-            else: self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
+            else:
+                self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
             # Processes data
             if command:
                 data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
@@ -219,8 +303,10 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             try:
                 st = await sck_rep.recv()
                 commandname, has_data, data, command, exception = parse_statement(st)
-                if exception: result = exception
-                else: result = await execute_command(command.method, data)
+                if exception:
+                    result = exception
+                else:
+                    result = await execute_command(command.method, data)
                 msg = pickle.dumps(result)
                 await sck_rep.send(msg)
             except zmq.Again: return False
@@ -245,6 +331,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
         sck_rep.bind(self.cfg.url)
         await self._initialize_cmd()
+        # todo not yet, if ever ... await self.__start_subservers()
         await self._on_initialize()
         # MAIN LOOP ...
         self.__state = ST_LOOP
@@ -254,8 +341,10 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 if not did_sth:
                     # Sleeps because tired of doing nothing
                     if self.cfg.sleepinterval > 0: await asyncio.sleep(self.cfg.sleepinterval)
-        except asyncio.CancelledError: raise
-        except KeyboardInterrupt: return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
+        except asyncio.CancelledError:
+            raise
+        except KeyboardInterrupt:
+            return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
         except:
             self.cfg.logger.exception(f"Server '{self.cfg.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
             raise

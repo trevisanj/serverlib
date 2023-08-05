@@ -73,13 +73,16 @@ class Intelligence(_api.WithClosers):
     def get_methods(self, flag_protected=False):
         """Return list of methods according to filter rules."""
 
-        return [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
-                if "__" not in x[0]
-                and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer",
-                                         "_i_",  # #convention for internal commands not to be picked up by get_methods()
-                                         ))
-                and (flag_protected or not x[0].startswith("_"))
-                and hasattr(x[1], "is_command") and x[1].is_command]
+        ret = [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
+               if "__" not in x[0]
+               and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer",
+                                        "_i_",  # #convention for internal commands not to be picked up by get_methods()
+                                        ))
+               and (flag_protected or not x[0].startswith("_"))
+               and hasattr(x[1], "is_command") and x[1].is_command]
+        for method in ret:
+            assert inspect.iscoroutinefunction(method), f"Method '{method.__name__}' is not awaitable"
+        return ret
 
     async def initialize(self):
         """Initializes. May be called only once."""

@@ -1,6 +1,12 @@
-__all__ = ["cli_client", "cli_server", "start_if_not", "stop_if", "cli_start_stop"]
+"""
+Routines not used by serverlib itself (made for external use!)
 
-import argparse, serverlib as sl, asyncio, a107, subprocess
+If you start using anything here within serverlib, move to basicapi.py instead
+"""
+
+__all__ = ["cli_client", "cli_server", "start_if_not", "stop_if", "cli_start_stop", "cli_start_stop1"]
+
+import argparse, serverlib as sl, asyncio, a107, subprocess, sys
 
 
 def cli_client(client_or_cfg):
@@ -14,7 +20,7 @@ def cli_client(client_or_cfg):
            C) or serverlib.ClientConfig instance
     """
 
-    client, cfg, _ = __get_client_and_cfg(client_or_cfg)
+    client, cfg, _ = sl.get_client_and_cfg(client_or_cfg)
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=a107.SmartFormatter)
     parser.add_argument("--host", type=str, required=False, default=cfg.defaulthost,
@@ -25,6 +31,7 @@ def cli_client(client_or_cfg):
     cfg.port = args.port
 
     asyncio.run(client.run())
+
 
 def cli_server(server_or_cfg):
     """
@@ -37,9 +44,9 @@ def cli_server(server_or_cfg):
            C) or serverlib.ServerConfig instance
     """
 
-    server, cfg = __get_server_and_cfg(server_or_cfg)
+    server, cfg, _ = sl.get_server_and_cfg(server_or_cfg)
 
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=a107.SmartFormatter)
+    parser = argparse.ArgumentParser(description="????????????????????????????????????????????????", formatter_class=a107.SmartFormatter)
     parser.add_argument("--host", type=str, required=False, default=cfg.defaulthost,
                         help="Host: setting this option allows to bind to a different host")
     parser.add_argument('-p', '--port', type=float, default=cfg.port, required=False, help="Port")
@@ -55,10 +62,10 @@ async def start_if_not(script, client_or_cfg):
     Calls script if poke is unsuccessful.
 
     Returns:
-        serverlib.Status(flag_executed, message)
+        whether or not started the server
     """
     ret = False
-    client, _, flag_instantialized = __get_client_and_cfg(client_or_cfg)
+    client, _, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
     try:
         client.temporarytimeout = 2000
         await client.execute_server('s_ping')
@@ -66,7 +73,7 @@ async def start_if_not(script, client_or_cfg):
         subprocess.Popen([script])
         ret = True
     finally:
-        if flag_instantialized:
+        if flag_instantiated:
             await client.close()
     return ret
 
@@ -75,10 +82,10 @@ async def stop_if(client_or_cfg):
     Stop server if running.
 
     Returns:
-        serverlib.Status(flag_stopped, message)
+        whether or not stopped the server
     """
     ret = False
-    client, _, flag_instantialized = __get_client_and_cfg(client_or_cfg)
+    client, _, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
     try:
         client.temporarytimeout = 2000
         await client.execute_server('s_ping')
@@ -87,7 +94,7 @@ async def stop_if(client_or_cfg):
     except sl.Retry:
         pass
     finally:
-        if flag_instantialized:
+        if flag_instantiated:
             await client.close()
     return ret
 
@@ -100,9 +107,9 @@ async def cli_start_stop(client_or_cfg, script):
         script: server script filename
     """
 
-    client, cfg, _ = __get_client_and_cfg(client_or_cfg)
+    client, cfg, _ = sl.get_client_and_cfg(client_or_cfg)
 
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=a107.SmartFormatter)
+    parser = argparse.ArgumentParser(description="??????????????????????????????????????????????????", formatter_class=a107.SmartFormatter)
     parser.add_argument("command", choices=["start", "stop", "restart"])
     args = parser.parse_args()
 
@@ -124,41 +131,74 @@ async def cli_start_stop(client_or_cfg, script):
             print(f"{s_script} was not started, as it is already running")
 
 
+async def cli_start_stop1(server_or_cfg, client_or_cfg):
+    """Runs a command-line interface (CLI) with start/stop/restart commands
 
-def __get_client_and_cfg(client_or_cfg):
-    flag_instantialized = False
-    if isinstance(client_or_cfg, sl.Client):
-        client = client_or_cfg
-        cfg = client.cfg
-    elif isinstance(client_or_cfg, sl.ClientConfig):
-        cfg = client_or_cfg
-        client = sl.Client(cfg=cfg)
-        flag_instantialized = True
-    elif issubclass(client_or_cfg, sl.Client):
-        if client_or_cfg == sl.Client:
-            raise TypeError(f"I need a ClientConfig to instantialize Client")
-        client = client_or_cfg()
-        cfg = client.cfg
-        flag_instantialized = True
-    else:
-        raise TypeError(f"client_or_config must be a Client/ClientConfig instance or a Client subclass, "
-                        f"not {client_or_cfg.__class__.__name__}")
-    return client, cfg, flag_instantialized
+    Args:
+        server_or_cfg: see serverlib.get_server_and_cfg()
+        client_or_cfg: see serverlib.get_client_and_cfg()
+    """
 
+    async def call_again_run_if_not():
+        """Starts server if ping is unsuccessful"""
+        flag_started = False
+        try:
+            client.temporarytimeout = 2000
+            await client.execute_server('s_ping')
+        except sl.Retry:
+            print(sys.argv[0])
+            subprocess.Popen([sys.argv[0], "run"])
+            flag_started = True
+        return flag_started
 
-def __get_server_and_cfg(server_or_cfg):
-    if isinstance(server_or_cfg, sl.Server):
-        server = server_or_cfg
-        cfg = server.cfg
-    elif isinstance(server_or_cfg, sl.ServerConfig):
-        cfg = server_or_cfg
-        server = sl.Server(cfg=cfg)
-    elif issubclass(server_or_cfg, sl.Server):
-        if server_or_cfg == sl.Server:
-            raise TypeError(f"I need a ServerConfig to instantialize Server")
-        server = server_or_cfg()
-        cfg = server.cfg
-    else:
-        raise TypeError(f"server_or_config must be a Server/ServerConfig instance or a Server subclass, "
-                        f"not {server_or_cfg.__class__.__name__}")
-    return server, cfg
+    client, cfg, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
+    try:
+
+        # Here we are trusting the client to be matchin the server subappname
+        servername = cfg.subappname
+
+        description = \
+f"""'{servername}' server control
+
+Descriptions of commands:
+    start    starts server if not running
+    stop     stops server if running
+    restart  start+stop combined
+    status   ping server
+    run      blocking run; does not check if running
+"""
+
+        parser = argparse.ArgumentParser(description=description, formatter_class=a107.SmartFormatter)
+        parser.add_argument("command", choices=["start", "stop", "restart", "ping", "run"],)
+        args = parser.parse_args()
+
+        if args.command == "run":
+            # if "--run" option is present, will take a different path and ignore "command"
+            server, _, _ = sl.get_server_and_cfg(server_or_cfg)
+            await server.run()
+        elif args.command == "ping":
+            try:
+                print(f"Pinging server (timeout={sl.lowstate.timeout/1000:g} seconds)...")
+                print(await client.execute_server('s_ping'))
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                print("Interrupted")
+            except sl.Retry:
+                print("Ping unsuccessful")
+        else:
+            flag_start = args.command in ("start", "restart")
+            flag_stop = args.command in ("stop", "restart")
+
+            if flag_stop:
+                ret = await stop_if(client)
+                if ret:
+                    print(f"Server '{servername}' was stopped")
+                else:
+                    print(f"Server '{servername}' was not stopped, as it was not running")
+            if flag_start:
+                ret = await call_again_run_if_not()
+                if not ret:
+                    print(f"Server '{servername}' was not started, as it is already running")
+    finally:
+        if flag_instantiated:
+            await client.close()
+
