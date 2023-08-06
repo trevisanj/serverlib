@@ -14,10 +14,6 @@ class BasicServerCommands(ServerCommands):
         return self.master.cfg.get_welcome()
 
     @is_command
-    async def s_getd_cfg(self):
-        return self.cfg.to_dict()
-
-    @is_command
     async def s_poke(self):
         """Prints and returns the server subappname (useful to identify what is running in a terminal)."""
         # print(f"👉 {self.cfg.subappname}")  # 👈")
@@ -56,14 +52,6 @@ class BasicServerCommands(ServerCommands):
             return helpitem
 
     @is_command
-    async def s_getd_lowstate(self):
-        """Returns serverlib's "lowstate" for server
-
-        As opposed to client-side "getd_lowstate()"
-        """
-        return sl.lowstate.__dict__
-
-    @is_command
     async def s_ping(self):
         """Returns "pong"."""
         return "pong"
@@ -79,12 +67,6 @@ class BasicServerCommands(ServerCommands):
         """Gently wakes up all sleepers or given sleeper."""
         self.master.wake_up(sleepername)
 
-    @is_command
-    async def s_getd_sleepers(self):
-        """Reports server sleepers as a list of dicts."""
-        ret = [{"name": sleeper.name, "seconds": sleeper.seconds} for sleeper in self.master.sleepers.values()]
-        return ret
-
     # Creating sleepers from the client has no practical use. This command was created for debugging purpose.
     # Maybe clean up when this topic is definitely finished.
     # This sleepers thing started as a humorous exercise to understand task cancellation and ended up somewhat serious
@@ -93,6 +75,12 @@ class BasicServerCommands(ServerCommands):
         """Creates sleeper that sleeps seconds. Just for debugging."""
         seconds = float(seconds)
         asyncio.create_task(self.master.sleep(float(seconds), name))
+
+    @is_command
+    async def s_getd_sleepers(self):
+        """Reports server sleepers as a list of dicts."""
+        ret = [{"name": sleeper.name, "seconds": sleeper.seconds} for sleeper in self.master.sleepers.values()]
+        return ret
 
     @is_command
     async def s_getd_loops(self):
@@ -105,4 +93,29 @@ class BasicServerCommands(ServerCommands):
                         "marked": loopdata.marked,
                         "errormessage": loopdata.errormessage,
                         })
+        return ret
+
+    @is_command
+    async def s_getd_lowstate(self):
+        """Returns serverlib's "lowstate" for server
+
+        As opposed to client-side "getd_lowstate()"
+        """
+        return sl.lowstate.__dict__
+
+    @is_command
+    async def s_getd_cfg(self):
+        return self.cfg.to_dict()
+
+    @is_command
+    async def s_getd_all(self):
+        """Returns dict containing all configurations and states"""
+
+        cmd = list(self.master.cmd.keys())
+
+        ret = {"cfg": await self.s_getd_cfg(),
+               "lowstate": await self.s_getd_lowstate(),
+               "loops": await self.s_getd_loops(),
+               "sleepers": await self.s_getd_sleepers(),
+               "cmd": cmd}
         return ret

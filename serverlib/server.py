@@ -262,7 +262,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
 
             try:
                 ret = await method(*data[0], **data[1])
-            except Exception as e:
+            except BaseException as e:
                 if sl.lowstate.flag_log_traceback:
                     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
                 else:
@@ -307,9 +307,22 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                     result = exception
                 else:
                     result = await execute_command(command.method, data)
-                msg = pickle.dumps(result)
-                await sck_rep.send(msg)
-            except zmq.Again: return False
+
+                try:
+                    msg = pickle.dumps(result)
+                except BaseException as e:
+                    if sl.lowstate.flag_log_traceback:
+                        a107.log_exception_as_info(self.logger, e, f"Error pickling result")
+                    else:
+                        self.logger.info(f"Error pickling result: {a107.str_exc(e)}")
+
+                    msg = pickle.dumps(e)
+                    await sck_rep.send(msg)
+                else:
+                    await sck_rep.send(msg)
+
+            except zmq.Again:
+                return False
             return True
 
         # INITIALIZATION
@@ -326,9 +339,13 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         sl.lowstate.numcontexts += 1
         sck_rep = ctx.socket(zmq.REP)
         sl.lowstate.numsockets += 1
-        logmsg = f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} ..."
-        self.cfg.logger.info(logmsg)
-        if not self.cfg.flag_log_console: print(logmsg) # If not logging to console, prints sth anyway (helps a lot)
+
+        self.cfg.logger.info(f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} at {a107.now_str()} ...")
+
+        # # If not logging to console, prints sth anyway (helps a lot)
+        # if not self.cfg.flag_log_console:
+        #     print(logmsg)
+
         sck_rep.bind(self.cfg.url)
         await self._initialize_cmd()
         # todo not yet, if ever ... await self.__start_subservers()
@@ -340,7 +357,8 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 did_sth = await recv_send()
                 if not did_sth:
                     # Sleeps because tired of doing nothing
-                    if self.cfg.sleepinterval > 0: await asyncio.sleep(self.cfg.sleepinterval)
+                    if self.cfg.sleepinterval > 0:
+                        await asyncio.sleep(self.cfg.sleepinterval)
         except asyncio.CancelledError:
             raise
         except KeyboardInterrupt:
@@ -352,8 +370,11 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             self.__state = ST_STOPPED
             self.cfg.logger.debug(f"😀 DON'T WORRY 😀 {self.__class__.__name__}.__serverloop() 'finally:'")
             self.wake_up()
-            await asyncio.sleep(0.1); self.stop()  # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
+
+            # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
+            await asyncio.sleep(0.1); self.stop()
             await self.close()
+
             sck_rep.close()
             sl.lowstate.numsockets -= 1
             ctx.destroy()

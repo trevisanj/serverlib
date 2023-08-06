@@ -27,13 +27,14 @@ class TaskAction:
 
 @dataclass
 class ErrorMapItem:
-    # Exception class
+    # BaseException class
     ecls: Any
     action: str
     flag_raise: bool
 
+
 errormap = [ErrorMapItem(sl.Retry, TaskAction.RETRY, False),
-            ErrorMapItem(Exception, TaskAction.SUSPEND, True),
+            ErrorMapItem(BaseException, TaskAction.SUSPEND, True),
             ]
 
 def prepend_item(item):
@@ -83,7 +84,7 @@ def prepend_item(item):
 #      "description": "bug",
 #      "emoji": "🐞",
 #      "action": ACTION_CRASH,
-#      "exception": Exception},
+#      "exception": BaseException},
 # }
 #
 # def taskexceptions():

@@ -188,7 +188,7 @@ class AgentServer(sl.DBServer):
 
                 await es()
 
-            except Exception as e:
+            except BaseException as e:
                 # This is to facilitate debugging should the code above have any error: reports error, suspends task
                 # and crashes
 

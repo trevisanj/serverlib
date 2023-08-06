@@ -1,2 +1,2 @@
 from .commands import *
-from .servercommands_basic import *
+from .basicservercommands import *

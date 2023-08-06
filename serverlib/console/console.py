@@ -85,7 +85,7 @@ class Console(_api.WithCommands, _api.WithClosers):
                 result = await self.execute(st)
             except (sl.StatementError, sl.NotAConsoleCommand) as e:
                 blueyoda(e)
-            except Exception as e:
+            except BaseException as e:
                 blueyoda(e)
                 if hasattr(e, "from_server"):
                     pass

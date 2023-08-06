@@ -24,15 +24,15 @@ class WithCommands:
         """
         for cmd in cmds:
             if not isinstance(cmd, (list, tuple)): cmd = [cmd]
-            for _ in cmd:
-                if not isinstance(_, sl.Intelligence):
-                    raise TypeError(f"Invalid commands type: {_.__class__.__name__} (must be an Intelligence)")
-            for _ in cmd:
-                _.master = self
-                self.cmd[_.title] = _
-                for metacommand in _.get_meta(flag_protected=True):
+            for cmd_ in cmd:
+                if not isinstance(cmd_, sl.Intelligence):
+                    raise TypeError(f"Invalid commands type: {cmd_.__class__.__name__} (must be an Intelligence)")
+            for cmd_ in cmd:
+                cmd_.master = self
+                self.cmd[cmd_.title] = cmd_
+                for metacommand in cmd_.get_meta(flag_protected=True):
                     name = metacommand.name
                     # WARNING: #gambiarra ahead
                     if name in self.metacommands and name not in ["getd_cfg"]:
-                        print(a107.format_warning(f"Repeated command: '{name}'"))  # TODO let's see, maybe we let commands override each other
+                        print(a107.format_warning(f"Repeated command: '{name}'"))  # TODO let's see, maybe we let commands override each other without warning
                     self.metacommands[name] = metacommand

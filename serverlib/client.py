@@ -179,7 +179,7 @@ class Client(sl.Console):
     async def __execute_bytes(self, bst):
         def process_result(b):
             ret = pickle.loads(b)
-            if isinstance(ret, Exception):
+            if isinstance(ret, BaseException):
                 ret.from_server = True
                 raise ret
             return ret
