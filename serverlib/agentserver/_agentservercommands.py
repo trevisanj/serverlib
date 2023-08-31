@@ -14,8 +14,8 @@ class AgentServerCommands(sl.DBServerCommands):
     @sl.is_command
     async def s_run_task_asap(self, idtask):
         """Configures task to be executed as soon as possible and tries to wake up corresponding agent."""
-        agentname = self.dbfile.get_scalar(f"select agentname from task where id={idtask}")
-        self.dbfile.execute(f"update task set state=0, nexttime=0 where id={idtask}")
+        agentname = self.dbfile.get_scalar("select agentname from task where id=?", (idtask,))
+        self.dbfile.execute("update task set state=?, nexttime=0 where id=?", (sl.TaskState.IDLE, idtask))
         self.dbfile.commit()
         # Tries to wake up the agent; if it fails, wakes up the server to span agent
         try:
@@ -25,9 +25,30 @@ class AgentServerCommands(sl.DBServerCommands):
             self.server.wake_up(self.server.sleepername)
 
     @sl.is_command
-    async def s_run_all_tasks_asap(self):
-        """Configures all idle tasks (state==0) to be executed as soon as possible and tries to wake up everybody."""
-        self.dbfile.execute(f"update task set state=0, nexttime=0 where state=0")
+    async def s_run_idle_tasks_asap(self):
+        """Configures all idle tasks (state==serverlib.TaskState.IDLE) to be executed as soon as possible and tries to wake up everybody."""
+        self.dbfile.execute(f"update task set nexttime=0 where state=?", (sl.TaskState.IDLE))
         self.dbfile.commit()
         self.server.wake_up()
+
+    @sl.is_command
+    async def s_getd_tasks(self, where=""):
+        """Returns list-of-dicts containing all task table columns."""
+        if where: where = " where "+where
+        ret = [dict(row) for row in self.dbfile.execute(f"select * from task{where}")]
+        return ret
+
+    @sl.is_command
+    async def s_update_task(self, idtask, *cols_values):
+        """Updates columns for identified task.
+
+        Args:
+            idtask: existing value for task's 'id' field
+            *cols_values: pairs of arguments: (columnname0, value0, columnname1, value1, ...)
+        """
+        await sl.update_row(db=self.dbfile,
+                            tablename="task",
+                            id_=idtask,
+                            cols_values=cols_values,
+                            columnnames=None)
 

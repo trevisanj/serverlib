@@ -72,10 +72,12 @@ def print_result(ret, logger=None, flag_colors=True):
 
         def handle_dict(arg):
             if len(arg) > 0:
-                if any(isinstance(x, (tuple, list, dict)) for x in arg.values()):
+                # 20230827 Limiting recursive resolution to first level
+                if level == 0 and any(isinstance(x, (tuple, list, dict)) for x in arg.values()):
                     # complex values: prints keys as titles and processes values
                     for i, (k, v) in enumerate(arg.items()):
-                        if i > 0: print()
+                        if i > 0:
+                            print()
                         print_header(k)
                         handle_all(v, level+1)
                 else:
@@ -83,7 +85,8 @@ def print_result(ret, logger=None, flag_colors=True):
                     if isinstance(first, str) and "\n" in first:
                         # dict of strings with more than one line: prints keys as titles and prints strings
                         for i, (k, v) in enumerate(arg.items()):
-                            if i > 0: print()
+                            if i > 0:
+                                print()
                             print_header(k)
                             print(v)
                     else:

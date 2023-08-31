@@ -17,6 +17,8 @@ class BaseConfig:
         subappname: "sub-appname". If undefined, falls back to appname. Affects all properties "<*>path".
                 Use for complex-structured applications with several servers. Otherwise, use appname and
                 leave this.
+        cfg: other BaseConfig. If passed, appname and subappname will be taken from this cfg.
+             It has precedence over appname and subappname
 
     Howto:
 
@@ -91,7 +93,7 @@ class BaseConfig:
         return self.__logger
 
     def __init__(self,
-                 appname,
+                 appname=None,
                  configdir=None,
                  flag_log_file=None,
                  flag_log_console=None,
@@ -102,23 +104,37 @@ class BaseConfig:
                  description=None,
                  reportdir=None,
                  defaultsuffix=None,
+                 cfg=None,
                  ):
         if defaultsuffix is not None:
             self.defaultsuffix = defaultsuffix
+        if logginglevel is None:
+            logginglevel = a107.logging_level
+        if flag_log_console is None:
+            flag_log_console = a107.flag_log_console
+
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.defaultsuffix"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
-        if logginglevel is None: logginglevel = a107.logging_level
-        if flag_log_console is None: flag_log_console = a107.flag_log_console
+
+        self.flag_log_file = flag_log_file if flag_log_file is not None else self.default_flag_log_file
+        self.flag_log_console = flag_log_console
+        self.logginglevel = logginglevel
+
+        if cfg is not None:
+            appname = cfg.appname
+            subappname = cfg.subappname
+
+        assert appname is not None, "appname has not been assigned either explicitly or with cfg"
+
+
+        self.master = None  # Server or Client
+        self.appname = appname
+        self.description = description
+
         self.__configdir = configdir
         self.__datadir = datadir
         self.__reportdir = reportdir
         self.__logger = None
-        self.master = None  # Server or Client
-        self.appname = appname
-        self.flag_log_console = flag_log_console
-        self.flag_log_file = flag_log_file if flag_log_file is not None else self.default_flag_log_file
-        self.logginglevel = logginglevel
-        self.description = description
         self.__subappname = subappname
         self.__suffix = suffix
 
@@ -182,7 +198,6 @@ class BaseConfig:
             h = self.__get_configobj_with_path(localpath, False)
             _populate_self(h)
 
-
     def get(self, attrname, default=None):
         """Retrieves attribute with default option."""
         return getattr(self, attrname) if hasattr(self, attrname) else default
@@ -233,7 +248,10 @@ class BaseConfig:
 
 
 class ClientServerConfig(BaseConfig):
-    """Base class for ClientConfig and ServerConfig."""
+    """Base class for ClientConfig and ServerConfig.
+
+    If cfg is passed, port will be taken from cfg (precedence over port argument).
+    """
 
     defaulthost = None
 
@@ -241,9 +259,13 @@ class ClientServerConfig(BaseConfig):
     def url(self):
         return sl.hopo2url((self.host, self.port), self.defaulthost)
 
-    def __init__(self, *args, host=None, port=None, **kwargs):
+    def __init__(self, *args, host=None, port=None, cfg=None, **kwargs):
         assert self.defaulthost is not None, f"Forgot to set {self.__class__.__name__}.defaulthost"
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, cfg=cfg, **kwargs)
+
+        if cfg is not None:
+            port = cfg.port
+
         self.host = host
         self.port = port
 
@@ -261,6 +283,7 @@ class ServerConfig(ClientServerConfig):
 
     def __init__(self, *args, sleepinterval=0.01, **kwargs):
         super().__init__(*args, **kwargs)
+        # time to sleep at each cycle of the main server loop (seconds)
         self.sleepinterval = sleepinterval
 
 

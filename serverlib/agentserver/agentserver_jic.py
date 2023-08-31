@@ -49,7 +49,7 @@ class AgentServer(sl.DBServer):
     async def __agentsloop(self):
         # This is the loop which spawns/kills agents
 
-        mydebug = lambda s: self.logger.debug(f"🕵🕵🕵 {s}'")
+        my_debug = lambda s: self.logger.debug(f"🕵🕵🕵 {s}'")
 
         async def review_agents():
             existingnames = list(self.__agents.keys())
@@ -57,12 +57,12 @@ class AgentServer(sl.DBServer):
             newnames = await dbclient.execute_server("s_get_singlecolumn", sql)
             for name in existingnames:
                 if name not in newnames:
-                    mydebug(f"Killing agent '{name}'")
+                    my_debug(f"Killing agent '{name}'")
                     try: self.__agents[name].cancel()
-                    except KeyError: mydebug(f"Agent '{name}' is already dead")
+                    except KeyError: my_debug(f"Agent '{name}' is already dead")
             for newname in newnames:
                 if newname not in existingnames:
-                    mydebug(f"Spawning agent '{newname}'")
+                    my_debug(f"Spawning agent '{newname}'")
                     self.__agents[newname] = asyncio.create_task(self.__agentloop(newname))
 
         dbclient = self.get_dbclient()
@@ -72,11 +72,11 @@ class AgentServer(sl.DBServer):
                 except sl.Retry as e: await self.sleep(e, self.__mastersleepername)
                 else: await self.sleep(self.cfg.masterloopinterval, self.__mastersleepername)
         finally:
-            mydebug(f"{self.__class__.__name__}.__masterloop() on its 'finally:' BEGIN")
+            my_debug(f"{self.__class__.__name__}.__masterloop() on its 'finally:' BEGIN")
             await dbclient.close()
             agents = list(self.__agents.values())
             for agent in agents: agent.cancel()
-            mydebug(f"{self.__class__.__name__}.__masterloop() on its 'finally:' END")
+            my_debug(f"{self.__class__.__name__}.__masterloop() on its 'finally:' END")
 
     async def __agentloop(self, agentname):
         # Each agent lives inside one call to this method
@@ -87,7 +87,7 @@ class AgentServer(sl.DBServer):
             return [self.__taskclass(**row) for row in await dbclient.execute_server("s_execute", st)]
 
         A = f"🕵 {agentname}"
-        mydebug = lambda s: self.logger.debug(f"{A} {s}")
+        my_debug = lambda s: self.logger.debug(f"{A} {s}")
 
         try:
             dbclient = self.get_dbclient()
@@ -100,13 +100,13 @@ class AgentServer(sl.DBServer):
                         if not tasks:
                             # 🕵 says: Probably all tasks were suspended, or even deleted, after I was spawned.
                             #          If this no-task situation persists, the server will soon kill me.
-                            mydebug(f"Got no tasks to run, so sleeping for a bit ...")
+                            my_debug(f"Got no tasks to run, so sleeping for a bit ...")
 
                             await self.sleep(sl.lowstate.retry_waittime, agentname)
                             continue
 
                         else:
-                            mydebug(f"Got {len(tasks)} tasks to run")
+                            my_debug(f"Got {len(tasks)} tasks to run")
 
                         waittime, _ = await self.__run_tasks_sequential(tasks, dbclient, taskcommands, agentname)
 
@@ -119,13 +119,13 @@ class AgentServer(sl.DBServer):
                         continue
 
             finally:
-                mydebug(f"on its 'finally:'")
+                my_debug(f"on its 'finally:'")
                 await sl.retry_on_cancelled(taskcommands.close(), logger=self.logger)
                 await sl.retry_on_cancelled(dbclient.close(), logger=self.logger)
-                mydebug(f"succeeded on its 'finally:'")
+                my_debug(f"succeeded on its 'finally:'")
         except asyncio.CancelledError: pass  # I know one could say I should raise this, not no, this is agent logic: agent loop does not raise
         except BaseException as e:
-            mydebug(f"️💀️ crashed with: '{a107.str_exc(e)}'")
+            my_debug(f"️💀️ crashed with: '{a107.str_exc(e)}'")
             if not isinstance(e, (KeyboardInterrupt, asyncio.CancelledError)):
                 traceback.print_exc()
         finally:

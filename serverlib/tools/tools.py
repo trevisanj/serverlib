@@ -4,7 +4,7 @@ Routines not used by serverlib itself (made for external use!)
 If you start using anything here within serverlib, move to basicapi.py instead
 """
 
-__all__ = ["cli_client", "cli_server", "start_if_not", "stop_if", "cli_start_stop", "cli_start_stop1"]
+__all__ = ["cli_client", "cli_server", "start_if_not", "stop_if", "cli_start_stop", "cli_start_stop1", "make_configs"]
 
 import argparse, serverlib as sl, asyncio, a107, subprocess, sys
 
@@ -202,3 +202,19 @@ Descriptions of commands:
         if flag_instantiated:
             await client.close()
 
+
+def make_configs(appname, subappname=None, port=None, servercls=None, clientcls=None):
+    """Automatic making server and client configuration objects"""
+
+    if servercls is None:
+        servercls = sl.ServerConfig
+    if clientcls is None:
+        clientcls = sl.ClientConfig
+
+    servercfg = servercls(appname=appname,
+                             subappname=subappname,
+                             port=port)
+    clientcfg = clientcls(appname=appname,
+                          subappname=subappname,
+                          port=port)
+    return servercfg, clientcfg

@@ -166,6 +166,9 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     async def _on_initialize(self):
         pass
 
+    async def _on_getd_all(self, statedict):
+        """Override this to add elements to statedict in response to server command "s_getd_all"."""
+
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
     # │ │└─┐├┤   │││├┤
     # └─┘└─┘└─┘  ┴ ┴└─┘
@@ -261,7 +264,10 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             """(callable, list) --> (result or exception) (only raises BaseException)."""
 
             try:
-                ret = await method(*data[0], **data[1])
+                if inspect.iscoroutinefunction(method):
+                    ret = await method(*data[0], **data[1])
+                else:
+                    ret = method(*data[0], **data[1])
             except BaseException as e:
                 if sl.lowstate.flag_log_traceback:
                     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")

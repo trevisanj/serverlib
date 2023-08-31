@@ -51,10 +51,11 @@ class AgentServer(sl.DBServer):
 
     # PRIVATE ZONE ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
 
+    @sl.is_loop
     async def __agentloop(self):
         # This is the loop which spawns/kills agents
 
-        mydebug = lambda s: self.logger.debug(f"🕵🕵🕵 {s}'")
+        my_debug = lambda s: self.logger.debug(f"🕵🕵🕵 {s}'")
 
         async def review_agents():
             existingnames = list(self.__agents.keys())
@@ -63,13 +64,13 @@ class AgentServer(sl.DBServer):
             newnames = self.dbfile.get_singlecolumn(sql)
             for name in existingnames:
                 if name not in newnames:
-                    mydebug(f"Killing agent '{name}'")
+                    my_debug(f"Killing agent '{name}'")
                     try: self.__agents[name].cancel()
-                    except KeyError: mydebug(f"Agent '{name}' is already dead")
+                    except KeyError: my_debug(f"Agent '{name}' is already dead")
             for newname in newnames:
                 if newname not in existingnames:
-                    mydebug(f"Spawning agent '{newname}'")
-                    self.__agents[newname] = asyncio.create_task(self.__agentlo_op(newname))
+                    my_debug(f"Spawning agent '{newname}'")
+                    self.__agents[newname] = asyncio.create_task(self.__agentlife(newname))
 
         # dbclient = self.get_dbclient()
 
@@ -81,7 +82,7 @@ class AgentServer(sl.DBServer):
                 except sl.Retry as e: await self.sleep(e, self.__sleepername)
                 else: await self.sleep(self.cfg.agentloopinterval, self.__sleepername)
         finally:
-            mydebug(f"{self.__class__.__name__}.__agentloop() on its 'finally:' BEGIN")
+            my_debug(f"{self.__class__.__name__}.__agentloop() on its 'finally:' BEGIN")
 
 
 
@@ -90,19 +91,161 @@ class AgentServer(sl.DBServer):
 
             agents = list(self.__agents.values())
             for agent in agents: agent.cancel()
-            mydebug(f"{self.__class__.__name__}.__agentloop() on its 'finally:' END")
+            my_debug(f"{self.__class__.__name__}.__agentloop() on its 'finally:' END")
 
-    async def __agentlo_op(self, agentname):
-        # Each agent lives inside one call to this method
-        # I wrote lo_op because otherwise this method will be picked up by serverlib.Server
+    # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+    async def __agentlife(self, agentname):
+        """
+        Each agent lives inside one call to this method
+        """
+
+        A = f"🕵 {agentname}"
+        my_debug = lambda s: self.logger.debug(f"{A} {s}")
+        my_info = lambda s: self.logger.info(f"{A} {s}")
+
+        # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
 
         async def get_tasks():
             st = f"select * from task where agentname='{agentname}' and state!='{TaskState.SUSPENDED}'"
             return [self.__taskclass(**row) for row in self.dbfile.execute(st)]
             # return [self.__taskclass(**row) for row in await dbclient.execute_server("s_execute", st)]
 
-        A = f"🕵 {agentname}"
-        mydebug = lambda s: self.logger.debug(f"{A} {s}")
+        # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+        async def run_tasks_sequential(tasks, taskcommands, agentname):
+            # async def run_tasks_sequential(self, tasks, dbclient, taskcommands, agentname):
+
+            """Tasks are executed sequentially.
+
+            Returns: (waittime, minnexttime)
+                waittime: time to wait until this method should be called again (seconds); or if preferred,
+                minnexttime: the timestamp representing the next time this method should be called."""
+            # assert isinstance(dbclient, sl.Client)
+            assert isinstance(taskcommands, sl.Intelligence)
+
+            for task in tasks:
+                if task.nexttime < time.time():
+                    # chillouttime = await self.__run_task(task, dbclient, taskcommands)
+
+                    chillouttime = await run_task(task, taskcommands)
+                    if chillouttime > 0:
+                        await self.sleep(chillouttime, agentname)
+
+            minnexttime = min(task.nexttime for task in tasks)
+            waittime = max(0, minnexttime - time.time())
+            return waittime, minnexttime
+
+        # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+        # async def __run_task(self, task, dbclient, taskcommands):
+        async def run_task(task, taskcommands):
+            """Exception handling center. Returns eventual chillout time"""
+            chillouttime = 0.
+
+            async def es():
+                sql = "update task set lasttime=?, nexttime=?, lasterror=?, state=?, result=? where id=?"
+                # await dbclient.execute_server("s_execute", sql,
+                #       (task.lasttime, task.nexttime, task.lasterror, task.state, task.result, task.id),
+                #       flag_commit=True)
+                self.dbfile.execute(sql,
+                                    (task.lasttime, task.nexttime, task.lasterror, task.state, task.result, task.id))
+                self.dbfile.commit()
+
+            # These act_on_*() are supposed to update the task table in the database
+
+            # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+            async def act_on_error(e):
+                # Will always find exception because last item is the completely generic Exception
+
+                try:
+                    for item in errormap:
+                        if isinstance(e, item.ecls):
+                            break
+
+                    task.lasterror = a107.str_exc(e)
+                    task.result = TaskResult.FAIL
+
+                    waittime = 0
+                    if item.action == TaskAction.RETRY:
+                        task.state = TaskState.IDLE
+                        assert isinstance(e, sl.Retry)
+                        waittime = e.waittime
+                        task.nexttime = time.time() + waittime
+                    elif item.action == TaskAction.SUSPEND:
+                        task.state = TaskState.SUSPENDED
+                        task.nexttime = 0.
+                    else:
+                        raise NotImplementedError(f"Action '{item.action}' not implemented")
+
+                    self.logger.info(f"Error executing {task}: {task.lasterror} (action: {item.action})")
+
+                    await es()
+
+                except BaseException as e:
+                    # This is to facilitate debugging should the code above have any error: reports error, suspends task
+                    # and crashes
+
+                    task.lasterror = f"Error inside act_on_error(): {a107.str_exc(e)}"
+                    task.result = TaskResult.FAIL
+                    task.state = TaskState.SUSPENDED
+                    task.nexttime = 0.
+
+                    raise
+
+                return item.flag_raise, waittime
+
+            # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+            async def act_on_success():
+                task.lasterror = ""
+                task.result = TaskResult.SUCCESS
+                task.state = TaskState.IDLE
+                task.nexttime = t + task.interval
+                await es()
+
+            # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+            async def act_on_start():
+                task.lasterror = ""
+                task.result = TaskResult.NONE
+                task.state = TaskState.IN_PROGRESS
+                task.lasttime = time.time()
+                await es()
+
+            # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
+            # === BEGIN task execution
+
+            my_debug(f"taking task {task} at {a107.now_str()}")
+
+            t = time.time()
+            await act_on_start()
+            try:
+                method = getattr(taskcommands, task.command)
+                signature = inspect.signature(method)
+                if len(signature.parameters) == 0:
+                    await method()  # task does not care about the task object
+                elif len(signature.parameters) == 1:
+                    await method(task)
+                else:
+                    msg = f"Method {taskcommands.__class__.__name__}.{method.__name__}() has wrong number of arguments " \
+                          f"(signature possibilities are: `()` or `(task)`, not `{str(signature)}`)"
+                    raise AssertionError(msg)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as e:
+                flag_raise, chillouttime = await act_on_error(e)
+                if flag_raise:
+                    raise  # will cause the agent to crash because it is a bug anyway
+            else:
+                await act_on_success()
+            return chillouttime
+
+            # === END task execution
+
+        # === BEGIN agent life
 
         try:
             # dbclient = self.get_dbclient()
@@ -115,15 +258,15 @@ class AgentServer(sl.DBServer):
                         if not tasks:
                             # 🕵 says: Probably all tasks were suspended, or even deleted, after I was spawned.
                             #          If this no-task situation persists, the server will soon kill me.
-                            mydebug(f"Got no tasks to run, so sleeping for a bit ...")
+                            my_debug(f"Got no tasks to run, so sleeping for a bit ...")
 
                             await self.sleep(sl.lowstate.retry_waittime, agentname)
                             continue
 
                         else:
-                            mydebug(f"Got {len(tasks)} tasks to run")
+                            my_debug(f"Got {len(tasks)} tasks to run")
 
-                        waittime, _ = await self.__run_tasks_sequential(tasks, taskcommands, agentname)
+                        waittime, _ = await run_tasks_sequential(tasks, taskcommands, agentname)
 
                         if waittime > 0:
                             await self.sleep(waittime, agentname)
@@ -134,129 +277,22 @@ class AgentServer(sl.DBServer):
                         continue
 
             finally:
-                mydebug(f"on its 'finally:'")
+                my_debug(f"on its 'finally:'")
                 await sl.retry_on_cancelled(taskcommands.close(), logger=self.logger)
                 # await sl.retry_on_cancelled(dbclient.close(), logger=self.logger)
-                mydebug(f"succeeded on its 'finally:'")
-        except asyncio.CancelledError: pass  # I know one could say I should raise this, not no, this is agent logic: agent loop does not raise
+                my_debug(f"succeeded on its 'finally:'")
+        except asyncio.CancelledError:
+            # I know one could say I should raise this, not no, this is agent logic: agent loop does not raise
+            pass
         except BaseException as e:
-            mydebug(f"️💀️ crashed with: '{a107.str_exc(e)}'")
+            my_debug(f"️💀️ crashed with: '{a107.str_exc(e)}'")
             if not isinstance(e, (KeyboardInterrupt, asyncio.CancelledError)):
                 traceback.print_exc()
         finally:
             del self.__agents[agentname]
 
-    async def __run_tasks_sequential(self, tasks, taskcommands, agentname):
-    # async def __run_tasks_sequential(self, tasks, dbclient, taskcommands, agentname):
+        # END agent life
 
-        """Tasks are executed sequentially.
-
-        Returns: (waittime, minnexttime)
-            waittime: time to wait until this method should be called again (seconds); or if preferred,
-            minnexttime: the timestamp representing the next time this method should be called."""
-        # assert isinstance(dbclient, sl.Client)
-        assert isinstance(taskcommands, sl.Intelligence)
-
-        for task in tasks:
-            if task.nexttime < time.time():
-                # chillouttime = await self.__run_task(task, dbclient, taskcommands)
-                chillouttime = await self.__run_task(task, taskcommands)
-                if chillouttime > 0: await self.sleep(chillouttime, agentname)
-
-        minnexttime = min(task.nexttime for task in tasks)
-        waittime = max(0, minnexttime-time.time())
-        return waittime, minnexttime
-
-    # async def __run_task(self, task, dbclient, taskcommands):
-    async def __run_task(self, task, taskcommands):
-        """Exception handling center. Returns eventual chillout time"""
-        chillouttime = 0.
-
-        async def es():
-            sql = "update task set lasttime=?, nexttime=?, lasterror=?, state=?, result=? where id=?"
-            # await dbclient.execute_server("s_execute", sql,
-            #       (task.lasttime, task.nexttime, task.lasterror, task.state, task.result, task.id), flag_commit=True)
-            self.dbfile.execute(sql, (task.lasttime, task.nexttime, task.lasterror, task.state, task.result, task.id))
-            self.dbfile.commit()
-
-        # These act_on_*() are supposed to update the task table in the database
-
-        async def act_on_error(e):
-            # Will always find exception because last item is the completely generic Exception
-
-            try:
-                for item in errormap:
-                    if isinstance(e, item.ecls):
-                        break
-
-                task.lasterror = a107.str_exc(e)
-                task.result = TaskResult.FAIL
-
-                waittime = 0
-                if item.action == TaskAction.RETRY:
-                    task.state = TaskState.IDLE
-                    assert isinstance(e, sl.Retry)
-                    waittime = e.waittime
-                    task.nexttime = time.time()+waittime
-                elif item.action == TaskAction.SUSPEND:
-                    task.state = TaskState.SUSPENDED
-                    task.nexttime = 0.
-                else:
-                    raise NotImplementedError(f"Action '{item.action}' not implemented")
-
-                self.logger.info(f"Error executing {task}: {task.lasterror} (action: {item.action})")
-
-                await es()
-
-            except BaseException as e:
-                # This is to facilitate debugging should the code above have any error: reports error, suspends task
-                # and crashes
-
-                task.lasterror = f"Error inside act_on_error(): {a107.str_exc(e)}"
-                task.result = TaskResult.FAIL
-                task.state = TaskState.SUSPENDED
-                task.nexttime = 0.
-
-                raise
-
-            return item.flag_raise, waittime
-
-        async def act_on_success():
-            task.lasterror = ""
-            task.result = TaskResult.SUCCESS
-            task.state = TaskState.IDLE
-            task.nexttime = t + task.interval
-            await es()
-
-        async def act_on_start():
-            task.lasterror = ""
-            task.result = TaskResult.NONE
-            task.state = TaskState.IN_PROGRESS
-            task.lasttime = time.time()
-            await es()
-
-        t = time.time()
-        await act_on_start()
-        try:
-            method = getattr(taskcommands, task.command)
-            signature = inspect.signature(method)
-            if len(signature.parameters) == 0:
-                await method()  # task does not care about the task object
-            elif len(signature.parameters) == 1:
-                await method(task)
-            else:
-                msg = f"Method {taskcommands.__class__.__name__}.{method.__name__}() has wrong number of arguments " \
-                      f"(signature possibilities are: `()` or `(task)`, not `{str(signature)}`)"
-                raise AssertionError(msg)
-        except asyncio.CancelledError:
-            raise
-        except BaseException as e:
-            flag_raise, chillouttime = await act_on_error(e)
-            if flag_raise:
-                raise  # will cause the agent to crash because it is a bug anyway
-        else:
-            await act_on_success()
-        return chillouttime
 
 # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
 

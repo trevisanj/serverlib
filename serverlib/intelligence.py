@@ -66,24 +66,6 @@ class Intelligence(_api.WithClosers):
 
     # INTERFACE
 
-    def get_meta(self, flag_protected=True):
-        """Creates list of MetaCommand's based on own methods, which are filtered according to get_methods() rules."""
-        return [_api.MetaCommand(method) for method in self.get_methods(flag_protected)]
-
-    def get_methods(self, flag_protected=False):
-        """Return list of methods according to filter rules."""
-
-        ret = [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
-               if "__" not in x[0]
-               and not x[0].startswith(("_on_", "_do_", "_append_closer", "_aappend_closer",
-                                        "_i_",  # #convention for internal commands not to be picked up by get_methods()
-                                        ))
-               and (flag_protected or not x[0].startswith("_"))
-               and hasattr(x[1], "is_command") and x[1].is_command]
-        for method in ret:
-            assert inspect.iscoroutinefunction(method), f"Method '{method.__name__}' is not awaitable"
-        return ret
-
     async def initialize(self):
         """Initializes. May be called only once."""
         assert not self.__flag_initialized
