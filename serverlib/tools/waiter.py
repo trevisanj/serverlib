@@ -32,9 +32,9 @@ class Waiter(sl.Intelligence):
         super().__init__(*args, **kwargs)
         # Default message if none is specified at wait() or wait_or_raise()
         self.__title = title
-        self.__time_next = self.__time_start = sl.lowstate.waiter_time_start if time_start is None else time_start
-        self.__maxtries = sl.lowstate.waiter_maxtries if maxtries is None else maxtries
-        self.__time_max = sl.lowstate.waiter_time_max if time_max is None else time_max
+        self.__time_next = self.__time_start = sl.config.waiter_time_start if time_start is None else time_start
+        self.__maxtries = sl.config.waiter_maxtries if maxtries is None else maxtries
+        self.__time_max = sl.config.waiter_time_max if time_max is None else time_max
         self.__numtries = 0
 
     def reset(self):

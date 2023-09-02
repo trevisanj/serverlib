@@ -5,7 +5,7 @@ from contextlib import redirect_stdout
 from colored import attr
 
 from serverlib import _api
-from serverlib.serverlibconfiguration import *
+from serverlib.config import *
 from . import _capi
 from ._capi import CST
 from ._essentialconsolecommands import EssentialConsoleCommands
@@ -104,7 +104,7 @@ class Console(_api.WithCommands, _api.WithClosers):
             while True:
                 self.flag_needs_to_reset_colors = True
                 readline.set_auto_history(True)
-                st = input("{}{}{}>".format(COLOR_INPUT, attr("bold"), prompt))
+                st = input("{}{}{}>".format(config.colors.input, attr("bold"), prompt))
                 readline.set_auto_history(False)
                 print(attr("reset"), end="")
                 self.flag_needs_to_reset_colors = False

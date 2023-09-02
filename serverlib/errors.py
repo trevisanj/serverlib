@@ -13,7 +13,7 @@ class Retry(Exception):
         import serverlib as sl
         super().__init__(*args, **kwargs)
         # Use to hint how much time should pass before retrying
-        self.waittime = waittime if waittime is not None else sl.lowstate.retry_waittime
+        self.waittime = waittime if waittime is not None else sl.config.retry_waittime
 
 
 class MismatchError(Exception):

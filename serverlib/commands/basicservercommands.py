@@ -113,8 +113,9 @@ class BasicServerCommands(ServerCommands):
 
         cmd = list(self.master.cmd.keys())
 
-        ret = {"cfg": await self.s_getd_cfg(),
-               "lowstate": await self.s_getd_lowstate(),
+        ret = {"serverlib.config": sl.cfg2dict(sl.config),
+               "serverlib.lowstate": sl.cfg2dict(sl.lowstate),
+               "cfg": await self.s_getd_cfg(),
                "loops": await self.s_getd_loops(),
                "sleepers": await self.s_getd_sleepers(),
                "cmd": cmd}

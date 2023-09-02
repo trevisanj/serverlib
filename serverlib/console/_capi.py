@@ -8,7 +8,7 @@ import a107
 from dataclasses import dataclass
 from typing import List
 from colored import fg, bg, attr
-from serverlib.serverlibconfiguration import *
+from serverlib.config import *
 from enum import IntEnum
 
 
@@ -61,15 +61,15 @@ def parse_statement(statement, args_, kwargs_):
 
 def yoda(s, happy=True):
     if s.endswith("."): s = s[:-1]+" ·"  # Yoda levitates the period
-    print(attr("bold")+(COLOR_HAPPY if happy else COLOR_SAD), end="")
+    print(attr("bold")+(config.colors.happy if happy else config.colors.sad), end="")
     print("{0}|o_o|{0} -- {1}".format("^" if happy else "v", s), end="")  # ◐◑
     print(attr("reset")*2)
 
 
 def my_print_exception(e):
     parts = []
-    if hasattr(e, "from_server"): parts.append(f'{COLOR_FROM_SERVER}(Error from server){attr("reset")}')
-    parts.append(f'{COLOR_ERROR}{attr("bold")}{e.__class__.__name__}:{attr("reset")}')
-    parts.append(f'{COLOR_ERROR}{str(e)}{attr("reset")}')
+    if hasattr(e, "from_server"): parts.append(f'{config.colors.from_server}(Error from server){attr("reset")}')
+    parts.append(f'{config.colors.error}{attr("bold")}{e.__class__.__name__}:{attr("reset")}')
+    parts.append(f'{config.colors.error}{str(e)}{attr("reset")}')
     print(" ".join(parts))
 

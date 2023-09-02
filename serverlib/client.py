@@ -5,7 +5,11 @@ __all__ = ["Client"]
 
 
 class Client(sl.Console):
-    """Client class."""
+    """Client class.
+
+    Args:
+        timeout: time to wait for server response (seconds)
+    """
 
     what = "client"
 
@@ -14,13 +18,13 @@ class Client(sl.Console):
         self.__assure_socket()
         return self.__socket
 
-    def __init__(self, *args, timeout=sl.lowstate.timeout, **kwargs):
+    def __init__(self, *args, timeout=sl.config.clienttimeout, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Timeout for the communications with the server
         self.timeout = timeout
 
-        # Temporary timeout to be used only once when server command is executed
+        # Temporary timeout (seconds) to be used only once when server command is executed
         # It is reset by any of the execute*() methods
         self.temporarytimeout = None
 
@@ -152,9 +156,10 @@ class Client(sl.Console):
 
 
     def __set_timeout(self, timeout):
+        zmqtimeout = int(timeout*1000)  # ZMQ needs timeout in milliseconds
         self.__assure_socket()
-        self.__socket.setsockopt(zmq.SNDTIMEO, timeout)
-        self.__socket.setsockopt(zmq.RCVTIMEO, timeout)
+        self.__socket.setsockopt(zmq.SNDTIMEO, zmqtimeout)
+        self.__socket.setsockopt(zmq.RCVTIMEO, zmqtimeout)
 
     def __make_context(self):
         self.__ctx = zmq.asyncio.Context()

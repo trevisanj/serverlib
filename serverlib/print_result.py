@@ -3,7 +3,7 @@
 __all__ = ["print_result", "result2str"]
 
 import tabulate, a107, textwrap, re, pl3, io
-from serverlib.serverlibconfiguration import *
+from serverlib.config import *
 from colored import fg, bg, attr
 from contextlib import redirect_stdout
 import serverlib as sl
@@ -56,7 +56,7 @@ def print_result(ret, logger=None, flag_colors=True):
     def handle_all(ret, level=0):
 
         def print_header(k):
-            print(attr('bold')+COLOR_HEADER+"\n".join(a107.format_h(level+1, k))+attr("reset"))
+            print(attr('bold')+config.colors.header+"\n".join(a107.format_h(level+1, k))+attr("reset"))
 
         def handle_list(arg):
             if len(arg) > 0:
@@ -103,9 +103,9 @@ def print_result(ret, logger=None, flag_colors=True):
             print(text)
 
         def handle_status(arg):
-            msg = arg.__title if not isinstance(arg.__title, (list, tuple)) else "\n".join(arg.__title)
+            msg = arg.msg if not isinstance(arg.msg, (list, tuple)) else "\n".join(arg.msg)
             if msg:
-                print(f"{COLOR_HEADER}Status:{RESET} {a107.fancilyquoted(msg)}")
+                print(f"{config.colors.header}Status:{RESET} {a107.fancilyquoted(msg)}")
             print_result(arg.ret, logger, flag_colors)  # recursive call to print result in Status object
 
         def handle_default(arg):

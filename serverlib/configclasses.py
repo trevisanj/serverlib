@@ -3,7 +3,7 @@
 __all__ = ["BaseConfig", "ServerConfig", "ClientConfig", "ConsoleConfig"]
 
 import os, a107, configobj, serverlib as sl, random
-from .serverlibconfiguration import KEBABWIDTH
+from . import config, _api
 
 class BaseConfig:
     """Common functionality for ClientConfig and ServerConfig.
@@ -25,7 +25,13 @@ class BaseConfig:
         - add configurable attribute: override __init__()
     """
 
+
+    # Prefix in logging messages to distinguish client from server
+    loggingprefix = ""
+
+    # Suffix to show on certain occasions
     defaultsuffix = ""
+
     default_flag_log_file = False
 
     @property
@@ -85,11 +91,22 @@ class BaseConfig:
     @property
     def logger(self):
         if self.__logger is None:
-            self.__logger = a107.get_new_logger(fn_log=self.logpath,
+            flag_created_dir = False
+            if self.flag_log_file:
+                dir_ = os.path.split(self.logpath)[0]
+                if dir_:
+                    flag_created_dir = a107.ensure_path(dir_)
+
+            self.__logger = _api.get_new_logger(fn_log=self.logpath,
                                                 flag_log_file=self.flag_log_file,
                                                 flag_log_console=self.flag_log_console,
                                                 level=self.logginglevel,
+                                                prefix = self.loggingprefix,
                                                 name=self.subappname)
+
+            if flag_created_dir:
+                self.logger.info(f"Created directory '{dir_}'")
+
         return self.__logger
 
     def __init__(self,
@@ -109,9 +126,9 @@ class BaseConfig:
         if defaultsuffix is not None:
             self.defaultsuffix = defaultsuffix
         if logginglevel is None:
-            logginglevel = a107.logging_level
+            logginglevel = config.logging.level
         if flag_log_console is None:
-            flag_log_console = a107.flag_log_console
+            flag_log_console = config.logging.flag_console
 
         assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.defaultsuffix"
         assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
@@ -220,7 +237,7 @@ class BaseConfig:
         slugtitle = f"Welcome to the '{self.subappname}' {self.suffix}"
         ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
         if self.description:
-            ret += "\n"+a107.kebab(self.description, KEBABWIDTH)
+            ret += "\n"+a107.kebab(self.description, config.descriptionwidth)
         return ret
 
     def __get_configobj_with_path(self, path_, flag_create_empty):
@@ -277,6 +294,7 @@ class ServerConfig(ClientServerConfig):
         sleepinterval: (seconds) time to sleep if didn't receive any requests in serverloop cycle
     """
 
+    loggingprefix = "S"
     defaultsuffix = "server"
     defaulthost = "*"
     default_flag_log_file = True
@@ -309,6 +327,7 @@ class ClientConfig(ClientServerConfig, _WithHistory):
         fav: favourites list
     """
 
+    loggingprefix = "C"
     defaultsuffix = "client"
     defaulthost = "127.0.0.1"
     default_flag_log_file = False
@@ -329,6 +348,7 @@ class ConsoleConfig(BaseConfig, _WithHistory):
         fav: favourites list
     """
 
+    loggingprefix = "O"
     defaultsuffix = "console"
     default_flag_log_file = False
 

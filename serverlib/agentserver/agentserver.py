@@ -260,7 +260,7 @@ class AgentServer(sl.DBServer):
                             #          If this no-task situation persists, the server will soon kill me.
                             my_debug(f"Got no tasks to run, so sleeping for a bit ...")
 
-                            await self.sleep(sl.lowstate.retry_waittime, agentname)
+                            await self.sleep(sl.config.retry_waittime, agentname)
                             continue
 
                         else:

@@ -269,7 +269,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 else:
                     ret = method(*data[0], **data[1])
             except BaseException as e:
-                if sl.lowstate.flag_log_traceback:
+                if sl.config.flag_log_traceback:
                     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
                 else:
                     self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
@@ -317,7 +317,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 try:
                     msg = pickle.dumps(result)
                 except BaseException as e:
-                    if sl.lowstate.flag_log_traceback:
+                    if sl.config.flag_log_traceback:
                         a107.log_exception_as_info(self.logger, e, f"Error pickling result")
                     else:
                         self.logger.info(f"Error pickling result: {a107.str_exc(e)}")
