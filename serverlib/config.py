@@ -28,9 +28,17 @@ class config:
         neutral = fg("cyan")
 
     class logging:
-        # consolefmt = f'{fg("cyan")}[%(name)s][%(levelname)]{RESET} %(message)s'
-        # sc: server-or-client prefix
-        consolefmt = f'{fg("cyan")}[%(prefix)s%(name)s %(levelname)s]{RESET} %(message)s'
+
+        colors = {
+            lggng.DEBUG: fg("light_gray"),
+            lggng.INFO: fg("cyan"),
+            lggng.WARNING: fg("orange_red_1"),
+            lggng.ERROR: fg("light_red")+attr("bold"),
+            lggng.CRITICAL: fg("light_red"),
+        }
+
+        # Don't remove #color and #reset
+        consolefmt = f'#color[%(prefix)s%(name)s %(levelname)s]#reset %(message)s'
         filefmt = '[%(prefix)s%(name)s %(levelname)s] %(message)s'
         level = lggng.INFO
         flag_console = False

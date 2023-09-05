@@ -12,7 +12,7 @@ from serverlib.config import *
 from enum import IntEnum
 
 
-class CST(IntEnum):
+class CSt(IntEnum):
     """Console/Client states"""
 
     INIT = 0  # still in __init__()

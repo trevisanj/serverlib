@@ -9,6 +9,11 @@ __all__ = ["get_metacommands", "get_commands", "get_new_logger"]
 
 from .metacommand import MetaCommand
 import inspect, logging, a107, os
+from colored import fg, attr
+from ..config import config
+
+
+RESET = attr("reset")
 
 
 def get_metacommands(obj, flag_protected=True):
@@ -41,7 +46,7 @@ def get_new_logger(level, flag_log_console, flag_log_file, fn_log, prefix, name)
 
     if flag_log_console:
         ch = logging.StreamHandler()
-        ch.setFormatter(logging.Formatter(sl.config.logging.consolefmt))
+        ch.setFormatter(a107.ColorFormatter(fmt=sl.config.logging.consolefmt, colors=sl.config.logging.colors))
         logger.addHandler(ch)
 
     # Prefix indicates whether the logging entity will be a server, client or console, and must end with " "

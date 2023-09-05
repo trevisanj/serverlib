@@ -1,6 +1,7 @@
 __all__ = ["AgentServerCommands"]
 
-import serverlib as sl
+import serverlib as sl, a107
+from . import agenttask
 
 class AgentServerCommands(sl.DBServerCommands):
     async def _on_initialize(self):
@@ -39,6 +40,19 @@ class AgentServerCommands(sl.DBServerCommands):
         return ret
 
     @sl.is_command
+    async def s_insert_task(self, command, agentname, time_of_day, interval, **kwargs):
+        taskcommands = self.master.get_new_taskcommands()
+        if not hasattr(taskcommands, command) or not hasattr(getattr(taskcommands, command), "__call__"):
+            raise ValueError(f"Invalid command '{command}'")
+
+        cols_values = {"command": command, "agentname": agentname, "time_of_day": time_of_day, "interval": interval,}
+        cols_values.update(kwargs)
+
+        await sl.insert_row(db=self.dbfile,
+                            tablename="task",
+                            cols_values=cols_values)
+
+    @sl.is_command
     async def s_update_task(self, idtask, *cols_values):
         """Updates columns for identified task.
 
@@ -46,9 +60,15 @@ class AgentServerCommands(sl.DBServerCommands):
             idtask: existing value for task's 'id' field
             *cols_values: pairs of arguments: (columnname0, value0, columnname1, value1, ...)
         """
-        await sl.update_row(db=self.dbfile,
+        db = self.dbfile
+        await sl.update_row(db=db,
                             tablename="task",
                             id_=idtask,
                             cols_values=cols_values,
                             columnnames=None)
 
+        task = agenttask.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (idtask,)))
+        task.calculate_nexttime()
+
+        db.execute("update task set nexttime=? where id=?", (task.nexttime, task.id))
+        db.commit()

@@ -2,6 +2,10 @@ __all__ = ["AgentServer"]
 
 import asyncio, a107, traceback, time, inspect, serverlib as sl
 from .taskcodes import *
+from . import agenttask
+
+
+
 
 class AgentServer(sl.DBServer):
     """Agent Server base class
@@ -14,6 +18,12 @@ class AgentServer(sl.DBServer):
                             containing methods whose name match the contents of the column `task.command`
                             in the database, and these methods must have a signature of either ```(self)````or
                             ```(self, task)```.
+
+    One task commandds instance will be created for each agent.
+    So, each task commands object is an isolated environment for its respective agent.
+    todo (2023-09-04) There is no clear reason for this, so to be revisited.
+
+    Each agent executes its task sequentially.
     """
 
     @property
@@ -34,7 +44,8 @@ class AgentServer(sl.DBServer):
         if not isinstance(self.cfg, sl.AgentServerConfig):
             raise TypeError(f"cfg must be a serverlib.AgentServerConfig, not {self.cfg.__class__.__name__}")
 
-        if taskclass is None: taskclass = a107.AutoClass
+        if taskclass is None:
+            taskclass = agenttask.AgentTask
         # self.__dbclientgetter = dbclientgetter
         self.__taskcommandsgetter = taskcommandsgetter
 
@@ -48,6 +59,9 @@ class AgentServer(sl.DBServer):
     # def get_dbclient(self):
     #     """Calls the dbclient getter passed to the constructor. This is supposed to create a new dbclient."""
     #     return self.__dbclientgetter()
+
+    def get_new_taskcommands(self):
+        return self.__taskcommandsgetter(self)
 
     # PRIVATE ZONE ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
 
@@ -78,9 +92,12 @@ class AgentServer(sl.DBServer):
 
         try:
             while True:
-                try: await review_agents()
-                except sl.Retry as e: await self.sleep(e, self.__sleepername)
-                else: await self.sleep(self.cfg.agentloopinterval, self.__sleepername)
+                try:
+                    await review_agents()
+                except sl.Retry as e:
+                    await self.sleep(sl.config.retry_waittime, self.__sleepername)
+                else:
+                    await self.sleep(self.cfg.agentloopinterval, self.__sleepername)
         finally:
             my_debug(f"{self.__class__.__name__}.__agentloop() on its 'finally:' BEGIN")
 
@@ -170,8 +187,10 @@ class AgentServer(sl.DBServer):
                     waittime = 0
                     if item.action == TaskAction.RETRY:
                         task.state = TaskState.IDLE
-                        assert isinstance(e, sl.Retry)
-                        waittime = e.waittime
+                        # todo cleanup I got rid of sl.Retry.waittime
+                        # assert isinstance(e, sl.Retry)
+                        # waittime = e.waittime
+                        waittime = sl.config.retry_waittime
                         task.nexttime = time.time() + waittime
                     elif item.action == TaskAction.SUSPEND:
                         task.state = TaskState.SUSPENDED
@@ -202,7 +221,8 @@ class AgentServer(sl.DBServer):
                 task.lasterror = ""
                 task.result = TaskResult.SUCCESS
                 task.state = TaskState.IDLE
-                task.nexttime = t + task.interval
+                task.calculate_nexttime()
+                my_debug(f"next time for command '{task.command}' is {a107.ts2str(task.nexttime)}")
                 await es()
 
             # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
@@ -211,7 +231,7 @@ class AgentServer(sl.DBServer):
                 task.lasterror = ""
                 task.result = TaskResult.NONE
                 task.state = TaskState.IN_PROGRESS
-                task.lasttime = time.time()
+                task.lasttime = t
                 await es()
 
             # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
@@ -220,7 +240,9 @@ class AgentServer(sl.DBServer):
 
             my_debug(f"taking task {task} at {a107.now_str()}")
 
+            # time just before task begins
             t = time.time()
+
             await act_on_start()
             try:
                 method = getattr(taskcommands, task.command)
@@ -249,7 +271,7 @@ class AgentServer(sl.DBServer):
 
         try:
             # dbclient = self.get_dbclient()
-            taskcommands = self.__taskcommandsgetter(self)
+            taskcommands = self.get_new_taskcommands()
             await taskcommands.initialize()
             try:
                 while True:
@@ -272,7 +294,7 @@ class AgentServer(sl.DBServer):
                             await self.sleep(waittime, agentname)
 
                     except sl.Retry as e:
-                        self.logger.info(f"{A} Error: {a107.str_exc(e)} (will retry)")
+                        self.logger.error(f"{A} Error: {a107.str_exc(e)} (will retry)")
                         await self.sleep(e, agentname)
                         continue
 
@@ -295,4 +317,5 @@ class AgentServer(sl.DBServer):
 
 
 # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
+
 

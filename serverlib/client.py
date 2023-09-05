@@ -150,7 +150,7 @@ class Client(sl.Console):
         self.__socket = self.__ctx.socket(zmq.REQ)
         sl.lowstate.numsockets += 1
         self.__set_timeout(self.timeout)
-        print(f"Connecting {self.name}, ``{self.cfg.subappname}(client)'', to {self.cfg.url} ...")
+        self.logger.info(f"Connecting {self.name}, ``{self.cfg.subappname}(client)'', to {self.cfg.url} ...")
         self.__socket.connect(self.cfg.url)
 
 

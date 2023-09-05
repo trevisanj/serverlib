@@ -1,19 +1,23 @@
 """Server, ServerCommands etc."""
 
-__all__ = ["Server", "ST_INIT", "ST_ALIVE", "ST_LOOP", "ST_STOPPED"]
+__all__ = ["Server"]
+
 
 import pickle, signal, asyncio, a107, zmq, zmq.asyncio, serverlib as sl, traceback, random, inspect
 from colored import attr
 from dataclasses import dataclass
 from typing import Any
+from enum import Enum
+import tabulate
 from . import _api
 
 
 # Server states
-ST_INIT = 0     # still in __init__()
-ST_ALIVE = 10    # passed __init__()
-ST_LOOP = 30     # in main loop
-ST_STOPPED = 40  # stopped
+class ServerState(Enum):
+    INIT = 0      # still in __init__()
+    ALIVE = 10    # passed __init__()
+    LOOP = 30     # in main loop
+    STOPPED = 40  # stopped
 
 
 class _WithSleepers:
@@ -37,30 +41,32 @@ class _WithSleepers:
         await self.sleep(0.1)
 
     async def sleep(self, waittime, name=None):
-        """Takes a nap
+        """
+        Async blocks for waittime seconds, with possibility of premature wake-up using wake_up() method.
 
-         Q: Why not asyncio.sleep()?
-         A: Because this can be prematurely terminated with self.wake_up()."""
-        try:
-            logger = self.logger
-        except AttributeError:
-            logger = a107.get_python_logger()
+        Args:
+            waittime: value in seconds. Also accepts serverlib.Retry, in which case will assume
+                      fallback value ```serverlib.config.retry_waittime```
+            name: optional, unique name. If a sleeper with name already exists, will raise error.
+                  If not passed, will create a random name for the sleeper
+        """
+
+        if isinstance(waittime, sl.Retry):
+            waittime = sl.config.retry_waittime
+        if name is None:
+            name = a107.random_name()
+            while name in self.__sleepers:
+                name = a107.random_name()
+        else:
+            if name in self.__sleepers:
+                raise RuntimeError(f"Sleeper '{name}' already exists")
+
         my_debug = lambda s: logger.debug(
             f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
-
-        async def ensure_new_name(name):
-            i = 0
-            while sleeper.name in self.__sleepers:
-                if name is not None:
-                    msg = f"Called {self.__class__.__name__}.sleep({waittime}, '{name}') when '{name}' is already sleeping!"
-                    raise RuntimeError(msg)
-                sleeper.name += (" " if i == 0 else "")+chr(random.randint(65, 65+25))
-                i += 1
-
-        if isinstance(waittime, sl.Retry): waittime = waittime.waittime
+        logger = self.logger
         interval = min(waittime, 0.1)
+
         sleeper = _Sleeper(waittime, name)
-        await ensure_new_name(name)
         self.__sleepers[sleeper.name] = sleeper
         slept = 0
         try:
@@ -76,21 +82,24 @@ class _WithSleepers:
                 pass
 
 
+@dataclass
 class _Sleeper:
-    def __init__(self, seconds, name=None):
-        self.seconds = seconds
-        self.name = a107.random_name() if name is None else name
-        self.task = None
-        self.flag_wake_up = False
+    seconds: int
+    name: str
+    task: Any = None
+    flag_wake_up: bool = False
 
 
 @dataclass
 class _LoopData:
-    """Data class to store relevant information about a "loop"."""
+    """Encapsulates a @sl.is_loop-decorated method or a sub-server."""
+
+    def __str__(self):
+        return self.methodname
 
     @property
     def methodname(self):
-        return self.method.__name__
+        return self.method.__name__ if self.kind == "own loop" else None
 
     @property
     def flag_error(self):
@@ -102,8 +111,37 @@ class _LoopData:
             return ""
         return a107.str_exc(self.exception)
 
+    @property
+    def taskstatus(self):
+        return "no task" if self.task is None \
+            else "looping" if not self.task.done() \
+            else "cancelled" if self.task.cancelled() \
+            else "completed"
+
+    @property
+    def kind(self):
+        return "own loop" if self.method else "subserver"
+
+    @property
+    def detail(self):
+        ret = f"{self.master.__class__.__name__}.{self.methodname}()" if self.kind == "own loop" \
+            else f"{self.scpair.server.__class__.__name__}.run()"
+        return ret
+
+    @property
+    def coroutine(self):
+        return self.method if self.kind == "own loop" else self.scpair.server._run
+    
+    @property
+    def is_mainloop(self):
+        return self.kind == "own loop" and self.methodname.endswith("__mainloop")
+
+    # reference to the server
+    master: Any
+    # awaitable method with the @is_loop decorator. It has precedence over scpair
+    method: Any = None
     # awaitable method with the @is_loop decorator
-    method: Any
+    scpair: sl.SCPair = None
     # asyncio.Task
     task: Any = None
     # exception in case of error
@@ -112,6 +150,18 @@ class _LoopData:
     marked: bool = False
     # method result after awaited on
     result: Any = None
+    # todo cleanup when I am sure this is no longer an idea to be implemented # whether task was interrupted with KeyboardInterrupt
+    #  flag_interrupted = False
+
+    def to_dict(self):
+        return {"kind": self.kind,
+                "detail": self.detail,
+                "taskstatus": self.taskstatus,
+                "marked": self.marked,
+                "errormessage": self.errormessage,
+                ";)": "💥" if self.errormessage else "",
+                # ";)": "^C" if self.flag_interrupted else "💥" if self.errormessage else "",
+                }
 
 
 class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
@@ -139,7 +189,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         _api.WithClosers.__init__(self)
         _WithSleepers.__init__(self)
 
-        self.__state = ST_INIT
+        self.__state = ServerState.INIT
         self.cfg = cfg
         cfg.master = self
         self.__loops = None  # {methodname0: task0, ...}
@@ -148,16 +198,9 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         if cmd is not None:
             self._attach_cmd(cmd)
 
-        # todo changed my mind about implementing this for the moment
-        self.__subservers = []
-        if subservers is not None:
-            if isinstance(subservers, sl.SCPair):
-                self.__subservers.append(subservers)
-            else:
-                for item in subservers:
-                    self.__subservers.append(item)
+        self.__subservers = _get_scpairs(subservers)
 
-        self.__state = ST_ALIVE
+        self.__state = ServerState.ALIVE
 
     # ┌─┐┬  ┬┌─┐┬─┐┬─┐┬┌┬┐┌─┐  ┌┬┐┌─┐
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤
@@ -172,81 +215,108 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
     # │ │└─┐├┤   │││├┤
     # └─┘└─┘└─┘  ┴ ┴└─┘
-    # http://patorjk.com/software/taag/#p=display&f=Calvin%20S&t=use%20me
 
     async def run(self):
+        """
+        Runs server
+
+        Returns:
+            flag_no_exception: whether the server completed running successfully without an exception being raised
+                               inside it
+
+        This method does not raise exception, as the server puts a lot of effort into logging already. It returns
+        True/False instead, as explained in "Returns".
+        """
+        await self._run(0)
+
+    async def _run(self, level):
+        """Recursive run with level"""
+
+        #########
+        # RUN API
+
+        def get_tabulatedloops():
+            return [f"    {x}" for x in tabulate.tabulate([loopdata.to_dict() for loopdata in self.__loops],
+                                                          "keys").split("\n")]
+
         async def loopcoro(loopdata):
             """
-            This is an envelope around a server loop method
-
-            - Waits until main loop is ready (if secondary loop)
-            - Catches cancellation: I am sort of figuring out concurrency still, and want to see exactly how each loop
-              ends, and what are the best practices
+            Envelope around a server loop or subserver run
 
             Returns:
                 either the result of the method or an exception that was raised
             """
 
-            awaitable = loopdata.method()
+            coro = loopdata.coroutine
+            # If subserver, increments level
+            awaitable = coro(level+1) if loopdata.kind != "own loop" else coro()
             try:
-                if not loopdata.methodname.endswith("__serverloop"):  # secondary loop waits until primary loop is ready
-                    while self.state != sl.ST_LOOP:
+                if not loopdata.is_mainloop: 
+                    # other loops wait until main loop is ready
+                    while self.state != ServerState.LOOP:
                         await asyncio.sleep(0.01)
                 return await awaitable
-
+            # todo still don't know what to do with keyboard interruption (if ever happens, because it seems that asyncio throws a CancelledError)
+            #  except KeyboardInterrupt:
+            #     loopdata.flag_interrupted = True
+            except asyncio.CancelledError:
+                raise
             except BaseException as e:
+                # === CRASH
+
                 loopdata.exception = e
-                if isinstance(e, asyncio.CancelledError):
-                    return e
 
-                # BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE BUGZONE
-                # Here is the unified place to decide what to do with high-bug-probability errors
-                middles = [f"Crash in {self.__class__.__name__}.{loopdata.methodname}()", "Loops and errors:"]
-                middles.extend([f"  {'🦓' if loopdata.errormessage else '🐱'} {loopdata.methodname}: "
-                                f"{loopdata.errormessage}"
-                                for loopdata in self.__loops])
-                for s in middles:
-                    print(f"🐛🐛🐛 {attr('bold')}{s}{attr('reset')}")
-                traceback.print_exc()
+                if isinstance(e, zmq.ZMQError) and "Address already in use" in str(e):
+                    # It is now worth making a mess because of this
+                    raise
 
-                # todo apparently I decided to crash the whole server if any of the loop methods crash
+                # === LOGGING (crash log)
+                self.logger.error(f"💥 {loopdata.detail} **crashed**!")
+                self.logger.error("")
+                for s in get_tabulatedloops():
+                    self.logger.error(s)
+                self.logger.error("")
+                self.cfg.logger.exception(f"Cause of crash follows.")
+
                 raise
 
-        def create_loopdata(method):
-            loopdata = _LoopData(method)
-            loopdata.task = asyncio.create_task(loopcoro(loopdata), name=loopdata.methodname)
+        def create_loopdata(method=None, scpair=None):
+            loopdata = _LoopData(master=self, method=method, scpair=scpair)
+            loopdata.task = asyncio.create_task(loopcoro(loopdata), name=loopdata.detail)
             return loopdata
 
-        # def create_task_subserver(scpair):
-        #     task = asyncio.create_task(loopcoro(attrname), name=attrname)
-        #     task.errormessage = None
-        #     task.marked = False  # marked to die, like Guts
-        #     return task
 
-        # Automatically figures out all "loops"
-        loopmethods = [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
-                       if hasattr(x[1], "is_loop") and x[1].is_loop]
-        for method in loopmethods:
-            assert inspect.iscoroutinefunction(method), f"Method `{method.__name__}()` is not awaitable"
+        # === CREATES LOOPDATA, INCLUDING ASYNC TASKS
+        self.__loops = []
+        for method in [x[1] for x in inspect.getmembers(self, predicate=inspect.ismethod)
+                       if hasattr(x[1], "is_loop") and x[1].is_loop]:
+            self.__loops.append(create_loopdata(method=method))
+        for scpair in self.__subservers:
+            self.__loops.append(create_loopdata(scpair=scpair))
 
-        # debug
-        self.logger.debug(f"About to await on {[x.__name__ for x in loopmethods]}")
 
-        # runs everything
-        self.__loops = [create_loopdata(method) for method in loopmethods]
-        results = await asyncio.gather(*[loopdata.task for loopdata in self.__loops], return_exceptions=True)
+        try:
+            await asyncio.gather(
+                *[loopdata.task for loopdata in self.__loops],
+                return_exceptions=False,  # if any loop crashes the whole server crashes
+                )
+        except BaseException as e:
+            self.logger.error(f"🔥 {self.cfg.subappname} (level {level}) ended with exception: {a107.str_exc(e)}")
+            if level > 0:
+                # Exceptions are propagated until level 0 and then suppressed
+                raise
+            return False
 
-        # assigns each result to respective LoopData object
-        for loopdata, result in zip(self.__loops, results):
-            loopdata.result = result
+        return True
 
-        # debug
-        self.logger.debug(f"*** Server {self.cfg.subappname} -- how the story ended: ***")
-        for loopdata in self.__loops:
-            result = a107.str_exc(loopdata.result) if isinstance(loopdata.result, BaseException) else loopdata.result
-            self.logger.debug(f"{loopdata.methodname}(): {result}")
+        # === LOGGING
+        self.logger.debug(f"*** Server {self.cfg.subappname} finished execution ***")
+        for s in get_tabulatedloops():
+            self.logger.debug(s)
+
 
     def stop(self):
+        """Stops server by cancelling all tasks in self.__loops"""
         if self.__loops is not None:
             for loopdata in self.__loops:
                 if not loopdata.marked:
@@ -259,7 +329,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     # ┴─┘└─┘┴ ┴ └┘ └─┘  ┴ ┴└─┘  ┴ ┴┴─┘└─┘┘└┘└─┘
 
     @sl.is_loop
-    async def __serverloop(self):
+    async def __mainloop(self):
         async def execute_command(method, data):
             """(callable, list) --> (result or exception) (only raises BaseException)."""
 
@@ -269,10 +339,12 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 else:
                     ret = method(*data[0], **data[1])
             except BaseException as e:
-                if sl.config.flag_log_traceback:
-                    a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
-                else:
-                    self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
+                self.logger.exception(f"Error executing '{method.__name__}'")
+                # 2023 todo cleanup I think this is too much innovation when Python has a logging framework
+                # if sl.config.flag_log_traceback:
+                #     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
+                # else:
+                #     self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
                 ret = e
             return ret
 
@@ -317,6 +389,8 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 try:
                     msg = pickle.dumps(result)
                 except BaseException as e:
+                    self.logger.exception("Error pickling result")
+                    # 2023 todo cleanup I think this is too much innovation when Python has a logging framework
                     if sl.config.flag_log_traceback:
                         a107.log_exception_as_info(self.logger, e, f"Error pickling result")
                     else:
@@ -331,57 +405,79 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 return False
             return True
 
-        # INITIALIZATION
         def _ctrl_z_handler(signum, frame):
             print("Don't press Ctrl+Z 😠, or clean-up code won't be executed 😱; Ctl+C should do thou 😜")
-            flag_leave[0] = True
-        signal.signal(signal.SIGTSTP, _ctrl_z_handler)
-        signal.signal(signal.SIGTERM, _ctrl_z_handler)
-        flag_leave = [False]
 
-        self.cfg.read_configfile()
-        a107.ensure_path(self.cfg.datadir)
-        ctx = zmq.asyncio.Context()
-        sl.lowstate.numcontexts += 1
-        sck_rep = ctx.socket(zmq.REP)
-        sl.lowstate.numsockets += 1
-
-        self.cfg.logger.info(f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} at {a107.now_str()} ...")
-
-        # # If not logging to console, prints sth anyway (helps a lot)
-        # if not self.cfg.flag_log_console:
-        #     print(logmsg)
-
-        sck_rep.bind(self.cfg.url)
-        await self._initialize_cmd()
-        # todo not yet, if ever ... await self.__start_subservers()
-        await self._on_initialize()
-        # MAIN LOOP ...
-        self.__state = ST_LOOP
         try:
-            while True:
-                did_sth = await recv_send()
-                if not did_sth:
-                    # Sleeps because tired of doing nothing
-                    if self.cfg.sleepinterval > 0:
-                        await asyncio.sleep(self.cfg.sleepinterval)
-        except asyncio.CancelledError:
-            raise
-        except KeyboardInterrupt:
-            return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
-        except:
-            self.cfg.logger.exception(f"Server '{self.cfg.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
-            raise
+            # === INITIALIZATION
+            signal.signal(signal.SIGTSTP, _ctrl_z_handler)
+            signal.signal(signal.SIGTERM, _ctrl_z_handler)
+
+            self.cfg.read_configfile()
+            a107.ensure_path(self.cfg.datadir)
+            ctx = zmq.asyncio.Context()
+            sl.lowstate.numcontexts += 1
+            sck_rep = ctx.socket(zmq.REP)
+            sl.lowstate.numsockets += 1
+
+            # === BINDING
+            try:
+                self.cfg.logger.info(f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} at {a107.now_str()} ...")
+                sck_rep.bind(self.cfg.url)
+            except zmq.ZMQError as e:
+                self.logger.error(f"Cannot bind to {self.cfg.url}: {a107.str_exc(e)}")
+                raise
+
+            await self._initialize_cmd()
+            # todo not yet, if ever ... await self.__start_subservers()
+            await self._on_initialize()
+            # MAIN LOOP ...
+            self.__state = ServerState.LOOP
+            try:
+                while True:
+                    did_sth = await recv_send()
+                    if not did_sth:
+                        # Sleeps because tired of doing nothing
+                        if self.cfg.sleepinterval > 0:
+                            await asyncio.sleep(self.cfg.sleepinterval)
+            except asyncio.CancelledError:
+                raise
+            # except KeyboardInterrupt:
+            #     return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
+            # except:
+            #     self.cfg.logger.exception(f"Server '{self.cfg.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
+            #     raise
+            finally:
+                self.__state = ServerState.STOPPED
+                self.cfg.logger.debug(f"{self.__class__.__name__}.__mainloop() finally'")
+                self.wake_up()
+
+                # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
+                await asyncio.sleep(0.1)
+                self.stop()
+                await self.close()
+
+                sck_rep.close()
+                sl.lowstate.numsockets -= 1
+                ctx.destroy()
+                sl.lowstate.numcontexts -= 1
         finally:
-            self.__state = ST_STOPPED
-            self.cfg.logger.debug(f"😀 DON'T WORRY 😀 {self.__class__.__name__}.__serverloop() 'finally:'")
-            self.wake_up()
+            self.cfg.logger.info(f"Exiting {self.__class__.__name__}.__mainloop()")
 
-            # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
-            await asyncio.sleep(0.1); self.stop()
-            await self.close()
 
-            sck_rep.close()
-            sl.lowstate.numsockets -= 1
-            ctx.destroy()
-            sl.lowstate.numcontexts -= 1
+def _get_scpairs(scpairs):
+    if not scpairs:
+        return []
+
+    if isinstance(scpairs, sl.SCPair):
+        return [scpairs]
+
+    ret = []
+    for i, item in enumerate(scpairs):
+        if isinstance(item, sl.SCPair):
+            ret.append(item)
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            ret.append(sl.SCPair(*item))
+        else:
+            raise ValueError(f"Cannot convert item #{i} to serverlib.SCPair")
+    return ret

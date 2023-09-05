@@ -7,7 +7,7 @@ from colored import attr
 from serverlib import _api
 from serverlib.config import *
 from . import _capi
-from ._capi import CST
+from ._capi import CSt
 from ._essentialconsolecommands import EssentialConsoleCommands
 
 
@@ -37,12 +37,12 @@ class Console(_api.WithCommands, _api.WithClosers):
     def __init__(self, cfg, cmd=None):
         _api.WithCommands.__init__(self)
         _api.WithClosers.__init__(self)
-        self.__state = CST.INIT
+        self.__state = CSt.INIT
         self.cfg = cfg
         self.flag_needs_to_reset_colors = False
         self._attach_cmd(EssentialConsoleCommands())
         if cmd is not None: self._attach_cmd(cmd)
-        self.__state = CST.ALIVE
+        self.__state = CSt.ALIVE
 
         self.name = a107.random_name()
 
@@ -52,7 +52,7 @@ class Console(_api.WithCommands, _api.WithClosers):
         return self
 
     async def __aexit__(self, type_, value, traceback):
-        if self.__state < CST.CLOSED:
+        if self.__state < CSt.CLOSED:
             await self.close()
 
     # INTERFACE
@@ -99,7 +99,7 @@ class Console(_api.WithCommands, _api.WithClosers):
         self.__set_historylength()
         print(await self._get_welcome())
         prompt = await self._get_prompt()
-        self.__state = CST.LOOP
+        self.__state = CSt.LOOP
         try:
             while True:
                 self.flag_needs_to_reset_colors = True
@@ -118,7 +118,7 @@ class Console(_api.WithCommands, _api.WithClosers):
         except KeyboardInterrupt:
             pass
         finally:
-            self.__state = CST.STOPPED
+            self.__state = CSt.STOPPED
             await self.close()
 
     async def help(self, what=None, favonly=False):
@@ -140,7 +140,7 @@ class Console(_api.WithCommands, _api.WithClosers):
 
     async def close(self):
         await _api.WithClosers.close(self)
-        self.__state = CST.CLOSED
+        self.__state = CSt.CLOSED
 
     # OVERRIDABLE
 
@@ -204,12 +204,12 @@ class Console(_api.WithCommands, _api.WithClosers):
         return self._statementdata
 
     async def _assure_initialized(self):
-        if self.__state < CST.INITIALIZED:
+        if self.__state < CSt.INITIALIZED:
             self.cfg.read_configfile()
             await self._initialize_cmd()
             await self._initialize_client()
             await self._on_initialize()
-            self.__state = CST.INITIALIZED
+            self.__state = CSt.INITIALIZED
 
     # PRIVATE
 

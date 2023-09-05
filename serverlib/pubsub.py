@@ -29,8 +29,6 @@ class Publisher(sl.Intelligence):
         url = sl.hopo2url(self.hopo, "*")
         logmsg = f"Binding socket (PUB) to {url} ..."
         self.logger.info(logmsg)
-        if self.cfg is None or not hasattr(self.cfg, "flag_log_console") or not self.cfg.flag_log_console:
-            print(logmsg)  # If not logging to console, prints sth anyway (helps a lot)
         self.socket.bind(url)
 
     async def _on_close(self):

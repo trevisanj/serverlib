@@ -24,16 +24,22 @@ class WithCommands:
         **Note** This method may be called from __init__().
         """
         for cmd in cmds:
-            if not isinstance(cmd, (list, tuple)): cmd = [cmd]
+            if not isinstance(cmd, (list, tuple)):
+                cmd = [cmd]
+
             for cmd_ in cmd:
                 if not isinstance(cmd_, sl.Intelligence):
                     raise TypeError(f"Invalid commands type: {cmd_.__class__.__name__} (must be an Intelligence)")
+
             for cmd_ in cmd:
                 cmd_.master = self
                 self.cmd[cmd_.title] = cmd_
                 for metacommand in _basicapi.get_metacommands(cmd_, flag_protected=True):
                     name = metacommand.name
+
                     # WARNING: #gambiarra ahead
-                    if name in self.metacommands and name not in ["getd_cfg"]:
-                        print(a107.format_warning(f"Repeated command: '{name}'"))  # TODO let's see, maybe we let commands override each other without warning
+                    if name in self.metacommands:
+                        # TODO let's see, maybe we let commands override each other without warning
+                        self.logger.warming(f"Repeated command: '{name}'")
+
                     self.metacommands[name] = metacommand
