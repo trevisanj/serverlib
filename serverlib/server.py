@@ -390,11 +390,11 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                     msg = pickle.dumps(result)
                 except BaseException as e:
                     self.logger.exception("Error pickling result")
-                    # 2023 todo cleanup I think this is too much innovation when Python has a logging framework
-                    if sl.config.flag_log_traceback:
-                        a107.log_exception_as_info(self.logger, e, f"Error pickling result")
-                    else:
-                        self.logger.info(f"Error pickling result: {a107.str_exc(e)}")
+                    # # 2023 todo cleanup I think this is too much innovation when Python has a logging framework
+                    # if sl.config.flag_log_traceback:
+                    #     a107.log_exception_as_info(self.logger, e, f"Error pickling result")
+                    # else:
+                    #     self.logger.info(f"Error pickling result: {a107.str_exc(e)}")
 
                     msg = pickle.dumps(e)
                     await sck_rep.send(msg)
@@ -414,7 +414,8 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             signal.signal(signal.SIGTERM, _ctrl_z_handler)
 
             self.cfg.read_configfile()
-            a107.ensure_path(self.cfg.datadir)
+            if a107.ensure_path(self.cfg.datadir):
+                self.logger.info(f"Created directory '{self.cfg.datadir}'")
             ctx = zmq.asyncio.Context()
             sl.lowstate.numcontexts += 1
             sck_rep = ctx.socket(zmq.REP)

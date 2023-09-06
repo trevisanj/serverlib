@@ -19,10 +19,10 @@ class WithClosers:
         Examples:
 
         Returns object passed as argument so that it can be assigned to a variable in the same line of code:
-        >>> self.seriesdbclient = self._append_closers(sacca.SeriesDBClient())
+        >>> self.seriesdbclient = self._append_closers(sacca.SeriesClient())
 
         In this example, a list is returned:
-        >>> self.seriesdbclient, self.twitterdbclient = self._append_closers(sacca.SeriesDBClient(),
+        >>> self.seriesdbclient, self.twitterdbclient = self._append_closers(sacca.SeriesClient(),
         >>>                                                                 sacca.TwitterDBClient())
         """
         ret = []
@@ -60,19 +60,22 @@ class WithClosers:
     # INHERITABLES
 
     async def _on_close(self):
-        pass
+        """Inherit to implement clean-up operations in subclasses outside serverlib."""
 
     async def _do_close(self):
-        pass
+        """This method is called after _on_close(). It inherited by Client. Do not inherit further outside serverlib."""
 
     # INTERFACE
 
     async def close(self):
         """Calls self._on_close() and self._do_close() first; then calls closers' close()."""
-        assert not self.__flag_called_close, f"{self.__class__.__name__}.close() has already been called"
-        self.logger.debug(f"Clooooooooooooooooooooooooooooooooooosando {self.__class__.__name__}")
 
-        await asyncio.gather(self._on_close(), self._do_close())
+        assert not self.__flag_called_close, f"{self.__class__.__name__}.close() has already been called"
+
+        self.logger.debug(f"Closing {self.__class__.__name__}")
+
+        await self._on_close()
+        await self._do_close()
 
         # Separates awaitables and non-awaitables
         awaitables = []
@@ -80,8 +83,10 @@ class WithClosers:
             flag_has = True
             try: method = closer.close
             except AttributeError:
-                try: method = closer.Close
-                except AttributeError: flag_has = False
+                try:
+                    method = closer.Close
+                except AttributeError:
+                    flag_has = False
             if not flag_has:
                 raise AttributeError(f"Class {closer.__class__.__name__} does not have close()/Close() method")
 
@@ -89,6 +94,7 @@ class WithClosers:
                 method()
             else:
                 awaitables.append(method())
+
         await asyncio.gather(*awaitables)
         self.__flag_called_close = True
 

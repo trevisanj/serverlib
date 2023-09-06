@@ -13,22 +13,52 @@ class AgentServerCommands(sl.DBServerCommands):
         return list(self.master.agents.keys())
 
     @sl.is_command
-    async def s_run_task_asap(self, idtask):
-        """Configures task to be executed as soon as possible and tries to wake up corresponding agent."""
-        agentname = self.dbfile.get_scalar("select agentname from task where id=?", (idtask,))
-        self.dbfile.execute("update task set state=?, nexttime=0 where id=?", (sl.TaskState.IDLE, idtask))
-        self.dbfile.commit()
-        # Tries to wake up the agent; if it fails, wakes up the server to span agent
+    async def s_run_asap(self, task):
+        """
+        Configures task(s) to be executed as soon as possible.
+
+        Args:
+            task: <task id>|"all"|"idle"|"suspended"
+
+        Tasks "in_progress" won't be touched
+        """
+
+        flag_single = False
         try:
-            self.server.wake_up(agentname)
+            task = int(task)
+            flag_single = True
+        except ValueError:
+            if task == "all":
+                pass
+            elif task == sl.TaskState.in_progress:
+                raise ValueError(f"Tasks '{task} won't be touched")
+            elif task not in (sl.TaskState.idle, sl.TaskState.suspended):
+                raise ValueError(f"Invalid value for task: '{task}'")
+
+        db = self.dbfile
+
+        where = "where "+(f"id={task}" if isinstance(task, int)
+                          else f"state <> '{sl.TaskState.in_progress}'" if task == "all"
+                          else f"state = {task}")
+
+        agentnames = set(db.get_singlecolumn(f"select agentname from task {where}"))
+
+        db.execute(f"update task set state=?, nexttime=0 {where}", (sl.TaskState.idle,))
+        self.dbfile.commit()
+
+        try:
+            # Tries to wake up specific agents involved
+            for agentname in agentnames:
+                self.logger.debug(f"Trying to take up agent '{agentname}'")
+                self.server.wake_up(agentname)
         except KeyError:
-            # failed waking agent up, wakes up server instead
-            self.server.wake_up(self.server.sleepername)
+            # If any agent is not found, better to review agents
+            self.server.review_agents()
 
     @sl.is_command
     async def s_run_idle_tasks_asap(self):
-        """Configures all idle tasks (state==serverlib.TaskState.IDLE) to be executed as soon as possible and tries to wake up everybody."""
-        self.dbfile.execute(f"update task set nexttime=0 where state=?", (sl.TaskState.IDLE))
+        """Configures all idle tasks (state==serverlib.TaskState.idle) to be executed as soon as possible and tries to wake up everybody."""
+        self.dbfile.execute(f"update task set nexttime=0 where state=?", (sl.TaskState.idle, ))
         self.dbfile.commit()
         self.server.wake_up()
 
@@ -53,21 +83,21 @@ class AgentServerCommands(sl.DBServerCommands):
                             cols_values=cols_values)
 
     @sl.is_command
-    async def s_update_task(self, idtask, *cols_values):
+    async def s_update_task(self, taskid, *cols_values):
         """Updates columns for identified task.
 
         Args:
-            idtask: existing value for task's 'id' field
+            taskid: existing value for task's 'id' field
             *cols_values: pairs of arguments: (columnname0, value0, columnname1, value1, ...)
         """
         db = self.dbfile
         await sl.update_row(db=db,
                             tablename="task",
-                            id_=idtask,
+                            id_=taskid,
                             cols_values=cols_values,
                             columnnames=None)
 
-        task = agenttask.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (idtask,)))
+        task = agenttask.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (taskid,)))
         task.calculate_nexttime()
 
         db.execute("update task set nexttime=? where id=?", (task.nexttime, task.id))

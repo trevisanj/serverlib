@@ -5,8 +5,6 @@ from .taskcodes import *
 from . import agenttask
 
 
-
-
 class AgentServer(sl.DBServer):
     """Agent Server base class
 
@@ -18,21 +16,15 @@ class AgentServer(sl.DBServer):
                             containing methods whose name match the contents of the column `task.command`
                             in the database, and these methods must have a signature of either ```(self)````or
                             ```(self, task)```.
-
-    One task commandds instance will be created for each agent.
-    So, each task commands object is an isolated environment for its respective agent.
-    todo (2023-09-04) There is no clear reason for this, so to be revisited.
-
-    Each agent executes its task sequentially.
     """
 
     @property
     def agents(self):
         return self.__agents
 
-    @property
-    def sleepername(self):
-        return self.__sleepername
+    # @property
+    # def sleepername(self):
+    #     return self.__sleepername
 
     def __init__(self, *args, taskcommandsgetter, taskclass=None, **kwargs):
     # def __init__(self, *args, dbclientgetter, taskcommandsgetter, taskclass=None, **kwargs):
@@ -50,7 +42,6 @@ class AgentServer(sl.DBServer):
         self.__taskcommandsgetter = taskcommandsgetter
 
         self.__taskclass = taskclass
-        self.__sleepername = "agentserver-agentloop"
         self.__agents = {}  # {agentname: (self.__agentlo_op() made task), ...}
         self._attach_cmd(AgentServerCommands())
 
@@ -63,6 +54,10 @@ class AgentServer(sl.DBServer):
     def get_new_taskcommands(self):
         return self.__taskcommandsgetter(self)
 
+    def review_agents(self):
+        """Causes agents to be reviewed asap."""
+        self.wake_up(_SLEEPERNAME)
+
     # PRIVATE ZONE ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
 
     @sl.is_loop
@@ -73,7 +68,7 @@ class AgentServer(sl.DBServer):
 
         async def review_agents():
             existingnames = list(self.__agents.keys())
-            sql = f"select agentname from task where state!= '{TaskState.SUSPENDED}' group by agentname"
+            sql = f"select agentname from task where state!= '{TaskState.suspended}' group by agentname"
             # newnames = await dbclient.execute_server("s_get_singlecolumn", sql)
             newnames = self.dbfile.get_singlecolumn(sql)
             for name in existingnames:
@@ -89,15 +84,14 @@ class AgentServer(sl.DBServer):
         # dbclient = self.get_dbclient()
 
 
-
         try:
             while True:
                 try:
                     await review_agents()
                 except sl.Retry as e:
-                    await self.sleep(sl.config.retry_waittime, self.__sleepername)
+                    await self.sleep(sl.config.retry_waittime, _SLEEPERNAME)
                 else:
-                    await self.sleep(self.cfg.agentloopinterval, self.__sleepername)
+                    await self.sleep(self.cfg.agentloopinterval, _SLEEPERNAME)
         finally:
             my_debug(f"{self.__class__.__name__}.__agentloop() on its 'finally:' BEGIN")
 
@@ -124,7 +118,7 @@ class AgentServer(sl.DBServer):
         # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
 
         async def get_tasks():
-            st = f"select * from task where agentname='{agentname}' and state!='{TaskState.SUSPENDED}'"
+            st = f"select * from task where agentname='{agentname}' and state!='{TaskState.suspended}'"
             return [self.__taskclass(**row) for row in self.dbfile.execute(st)]
             # return [self.__taskclass(**row) for row in await dbclient.execute_server("s_execute", st)]
 
@@ -182,18 +176,18 @@ class AgentServer(sl.DBServer):
                             break
 
                     task.lasterror = a107.str_exc(e)
-                    task.result = TaskResult.FAIL
+                    task.result = TaskResult.fail
 
                     waittime = 0
-                    if item.action == TaskAction.RETRY:
-                        task.state = TaskState.IDLE
+                    if item.action == TaskAction.retry:
+                        task.state = TaskState.idle
                         # todo cleanup I got rid of sl.Retry.waittime
                         # assert isinstance(e, sl.Retry)
                         # waittime = e.waittime
                         waittime = sl.config.retry_waittime
                         task.nexttime = time.time() + waittime
-                    elif item.action == TaskAction.SUSPEND:
-                        task.state = TaskState.SUSPENDED
+                    elif item.action == TaskAction.suspend:
+                        task.state = TaskState.suspended
                         task.nexttime = 0.
                     else:
                         raise NotImplementedError(f"Action '{item.action}' not implemented")
@@ -207,8 +201,8 @@ class AgentServer(sl.DBServer):
                     # and crashes
 
                     task.lasterror = f"Error inside act_on_error(): {a107.str_exc(e)}"
-                    task.result = TaskResult.FAIL
-                    task.state = TaskState.SUSPENDED
+                    task.result = TaskResult.fail
+                    task.state = TaskState.suspended
                     task.nexttime = 0.
 
                     raise
@@ -219,8 +213,8 @@ class AgentServer(sl.DBServer):
 
             async def act_on_success():
                 task.lasterror = ""
-                task.result = TaskResult.SUCCESS
-                task.state = TaskState.IDLE
+                task.result = TaskResult.success
+                task.state = TaskState.idle
                 task.calculate_nexttime()
                 my_debug(f"next time for command '{task.command}' is {a107.ts2str(task.nexttime)}")
                 await es()
@@ -229,8 +223,8 @@ class AgentServer(sl.DBServer):
 
             async def act_on_start():
                 task.lasterror = ""
-                task.result = TaskResult.NONE
-                task.state = TaskState.IN_PROGRESS
+                task.result = TaskResult.none
+                task.state = TaskState.in_progress
                 task.lasttime = t
                 await es()
 
@@ -319,3 +313,4 @@ class AgentServer(sl.DBServer):
 # ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲
 
 
+_SLEEPERNAME = "__agentloop"

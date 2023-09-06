@@ -115,6 +115,7 @@ class Console(_api.WithCommands, _api.WithClosers):
                     break
                 else:
                     await execute_in_loop(st)
+                    self.__write_history()
         except KeyboardInterrupt:
             pass
         finally:
@@ -225,11 +226,18 @@ class Console(_api.WithCommands, _api.WithClosers):
             ret = method(*data.args, **data.kwargs)
         return ret
 
+    def __write_history(self):
+        path_ = self.cfg.historypath
+        self.logger.debug(f"Writing history to file '{path_}'")
+        dir_ = os.path.split(path_)[0]
+        if a107.ensure_path(dir_):
+            self.logger.info(f"Created directory '{dir_}")
+        readline.write_history_file(path_)
+
     def __intercept_exit(self):
         # This one gets called at Ctrl+C, but ...
         def _atexit():
-            a107.ensure_path(os.path.split(self.cfg.historypath)[0])
-            readline.write_history_file(self.cfg.historypath)
+            self.__write_history()
             # await self.close()
             if self.flag_needs_to_reset_colors:
                 for t, letter in zip((.2, .07, .07, .1), "exit"):

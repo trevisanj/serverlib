@@ -6,8 +6,8 @@ import tabulate
 
 tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
 
-RESET = attr("reset")
 
+RESET = attr("reset")
 
 class config:
     """
@@ -42,6 +42,7 @@ class config:
         filefmt = '[%(prefix)s%(name)s %(levelname)s] %(message)s'
         level = lggng.INFO
         flag_console = False
+        flag_file = True
 
     class colors:
         okgreen = fg("green")
@@ -53,14 +54,25 @@ class config:
         input = fg("orange_1")
         header = fg("white")
 
+    # --- Data Root: diretory to store all serverlib data
+    # This will be the same for all applications that use serverlib (a specific subdirectory will be created
+    # for each application).
+    #
+    # Paths will be expanded with os.path.expanduser(), so the "~" character is functional.
+    #
+    # environment variable to define data root before running application
+    datarootenvvar = "SERVERLIB_DATAROOT"
+    # default data root
+    defaultdataroot = "~/.serverlib"
+
     # Description width in welcome message
     descriptionwidth = 100
 
     # client timeout (seconds)
     clienttimeout = 30
 
-    # Whether to server-side log traceback when command raises exception (to help with debugging)
-    flag_log_traceback: bool = True
+    # # todo cleanup # Whether to server-side log traceback when command raises exception (to help with debugging)
+    # flag_log_traceback: bool = True
 
     # Time to wait before retrying. This value is "informed" by a raised Retry exception
     retry_waittime: float = 1.

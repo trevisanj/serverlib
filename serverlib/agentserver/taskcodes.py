@@ -1,5 +1,9 @@
 """
-Expandable errormap to determine actions
+Definition of possible values for some of the task fields.
+
+Q: Why are task code classes not Python Enum?
+A: The codes are recorded as strings in the db file, and comparisons are cleaner like this.
+   If they were enums: (task.state == TaskState.idle.value)
 """
 __all__ = ["TaskState", "TaskResult", "TaskAction", "errormap", "ErrorMapItem", "prepend_item"]
 
@@ -9,20 +13,21 @@ import serverlib as sl
 
 
 class TaskState:
-# sqlite file's task.state possible values
-    IDLE = "idle"
-    IN_PROGRESS = "in_progress"
-    SUSPENDED = "suspended"
+    """Possible values for task.state"""
+    idle = "idle"
+    in_progress = "in_progress"
+    suspended = "suspended"
 
 class TaskResult:
-    NONE = "none"
-    SUCCESS = "success"
-    FAIL = "fail"
+    """Possible values for task.result"""
+    none = "none"
+    success = "success"
+    fail = "fail"
 
 class TaskAction:
     """Possible actions on error executing task."""
-    RETRY = "retry"
-    SUSPEND = "suspend"
+    retry = "retry"
+    suspend = "suspend"
 
 
 @dataclass
@@ -33,8 +38,8 @@ class ErrorMapItem:
     flag_raise: bool
 
 
-errormap = [ErrorMapItem(sl.Retry, TaskAction.RETRY, False),
-            ErrorMapItem(BaseException, TaskAction.SUSPEND, True),
+errormap = [ErrorMapItem(sl.Retry, TaskAction.retry, False),
+            ErrorMapItem(BaseException, TaskAction.suspend, True),
             ]
 
 def prepend_item(item):

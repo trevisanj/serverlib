@@ -3,6 +3,8 @@
 __all__ = ["BaseConfig", "ServerConfig", "ClientConfig", "ConsoleConfig"]
 
 import os, a107, configobj, serverlib as sl, random
+import traceback
+
 from . import config, _api
 
 class BaseConfig:
@@ -13,12 +15,15 @@ class BaseConfig:
 
     Args:
         appname: "umbrella" name affecting self.autodir=="~/.<appname>"
-        datadir: data directory. If undefined, falls back to self.autodir
-        subappname: "sub-appname". If undefined, falls back to appname. Affects all properties "<*>path".
-                Use for complex-structured applications with several servers. Otherwise, use appname and
-                leave this.
-        cfg: other BaseConfig. If passed, appname and subappname will be taken from this cfg.
-             It has precedence over appname and subappname
+        flag_log_file:
+        flag_log_console:
+        level:
+        datadir:
+        subappname: Used in filenames and welcome message
+        scc: "server", "client" or "console". Can be customized
+        description:
+        cfg: another BaseConfig. If passed, appname and subappname will be taken from this cfg.
+             It has precedence over appname and subappname passed as arguments
 
     Howto:
 
@@ -30,44 +35,44 @@ class BaseConfig:
     loggingprefix = ""
 
     # Suffix to show on certain occasions
-    defaultsuffix = ""
-
-    default_flag_log_file = False
+    defaultscc = ""
 
     @property
     def autodir(self):
         """Automatic directory made from self.appname."""
-        return os.path.expanduser(f"~/.{self.appname}")
+        if self.__autodir is None:
+            self.__autodir = self.__make_autodir()
+        return self.__autodir
 
     @property
     def subappname(self):
-        """Defaults to self.appname."""
         return self.__subappname if self.__subappname is not None else self.appname
 
-    @subappname.setter
-    def subappname(self, value):
-        self.__subappname = value
-
     @property
-    def suffix(self):
-        """Suffix for filenames. Defaults to self.defaultsubappname."""
-        return self.__suffix if self.__suffix is not None else self.defaultsuffix
+    def scc(self):
+        return self.__scc if self.__scc is not None else self.defaultscc
 
-    @suffix.setter
-    def suffix(self, value):
-        self.__suffix = value
-
-    @property
-    def configdir(self):
-        return self.__configdir if self.__configdir is not None else self.autodir
+    @scc.setter
+    def scc(self, value):
+        self.__scc = value
 
     @property
     def datadir(self):
         return self.__datadir if self.__datadir is not None else self.autodir
 
+    @datadir.setter
+    def datadir(self, value):
+        self.__datadir = value
+
     @property
     def reportdir(self):
-        return self.__reportdir if self.__reportdir is not None else "/tmp"
+        ret = os.path.join(self.datadir, "reports")
+        return ret
+
+    @property
+    def configdir(self):
+        ret = os.path.join(self.datadir, "cfg")
+        return ret
 
     @property
     def configfilename(self):
@@ -76,8 +81,8 @@ class BaseConfig:
 
     @property
     def configpath(self):
-        configpath = os.path.join(self.configdir, "cfg", self.configfilename)
-        return configpath
+        ret = os.path.join(self.configdir, self.configfilename)
+        return ret
 
     @property
     def logpath(self):
@@ -111,31 +116,21 @@ class BaseConfig:
 
     def __init__(self,
                  appname=None,
-                 configdir=None,
                  flag_log_file=None,
                  flag_log_console=None,
                  datadir=None,
                  logginglevel=None,
                  subappname=None,
-                 suffix=None,
+                 scc=None,
                  description=None,
-                 reportdir=None,
-                 defaultsuffix=None,
                  cfg=None,
                  ):
-        if defaultsuffix is not None:
-            self.defaultsuffix = defaultsuffix
-        if logginglevel is None:
-            logginglevel = config.logging.level
-        if flag_log_console is None:
-            flag_log_console = config.logging.flag_console
+        # possible error when subclassing
+        assert self.defaultscc is not None, f"Forgot to set {self.__class__.__name__}.defaultscc"
 
-        assert self.defaultsuffix is not None, f"Forgot to set {self.__class__.__name__}.defaultsuffix"
-        assert self.default_flag_log_file is not None, f"Forgot to set {self.__class__.__name__}.default_flag_log_file"
-
-        self.flag_log_file = flag_log_file if flag_log_file is not None else self.default_flag_log_file
-        self.flag_log_console = flag_log_console
-        self.logginglevel = logginglevel
+        self.flag_log_file = flag_log_file if flag_log_file is not None else sl.config.logging.flag_file
+        self.flag_log_console = flag_log_console if flag_log_console is not None else sl.config.logging.flag_console
+        self.logginglevel = logginglevel if logginglevel is not None else sl.config.logging.level
 
         if cfg is not None:
             appname = cfg.appname
@@ -143,17 +138,15 @@ class BaseConfig:
 
         assert appname is not None, "appname has not been assigned either explicitly or with cfg"
 
-
-        self.master = None  # Server or Client
         self.appname = appname
         self.description = description
-
-        self.__configdir = configdir
         self.__datadir = datadir
-        self.__reportdir = reportdir
-        self.__logger = None
         self.__subappname = subappname
-        self.__suffix = suffix
+        self.__scc = scc
+
+        self.master = None  # Server or Client
+        self.__logger = None
+        self.__autodir = None
 
     def __str__(self):
         return sl.cfg2str(self)
@@ -162,17 +155,17 @@ class BaseConfig:
         """Eventually prefixes suffix with a "-"
 
         Args:
-            suffix: defaults to self.suffix
+            suffix: defaults to self.scc
 
         Returns:
-            "-"+(suffix or self.suffix), or ""
+            "-"+(suffix or self.scc), or ""
 
             a) if suffix is empty, returns ""
             b) if suffix starts with ".", does not precede suffix with a "-"
             c) if suffix is not empty and does not start with a (".", "-"), precedes it with a "-"
         """
         if suffix is None:
-            suffix = self.suffix
+            suffix = self.scc
         if not suffix: return ""
         if suffix.startswith((".", "-")):
             return suffix
@@ -204,8 +197,7 @@ class BaseConfig:
 
         configpath = self.configpath
         d, f = os.path.split(configpath)
-        if not os.path.isdir(d):
-            a107.ensure_path(d)
+        if a107.ensure_path(d):
             self.logger.info(f"Created directory '{d}'")
         h = self.__get_configobj_with_path(configpath, True)
         _populate_self(h)
@@ -227,14 +219,14 @@ class BaseConfig:
         h.write()
 
     def filepath(self, suffix):
-        """Builds path to file <datadir>/<subappname><suffix>.
+        """Makes path <datadir>/<subappname><suffix>.
 
         Example of suffix: "-vars.pickle"
         """
         return os.path.join(self.datadir, f"{self.subappname}{self.dash_suffix_or_not(suffix)}")
 
     def get_welcome(self):
-        slugtitle = f"Welcome to the '{self.subappname}' {self.suffix}"
+        slugtitle = f"Welcome to the '{self.subappname}' {self.scc}"
         ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
         if self.description:
             ret += "\n"+a107.kebab(self.description, config.descriptionwidth)
@@ -257,10 +249,21 @@ class BaseConfig:
         else:
             configpath = self.configpath
             d, f = os.path.split(configpath)
-            if not os.path.isdir(d):
-                a107.ensure_path(d)
+            if a107.ensure_path(d):
                 self.logger.info(f"Created directory '{d}'")
             ret = self.__get_configobj_with_path(configpath, True)
+        return ret
+
+    def __make_autodir(self):
+        dataroot = os.getenv(sl.config.datarootenvvar)
+        # todo cleanup can't use logger here, so had to print print("\n\n\n\n\n===============  LASQUEIRAAAAAAAAAAAA", self.subappname, sl.config.datarootenvvar, dataroot)
+        #  traceback.print_stack()
+        #  print("=================\n")
+        if not dataroot:
+            dataroot = sl.config.defaultdataroot
+        if "~" in dataroot:
+            dataroot = os.path.expanduser(dataroot)
+        ret = os.path.join(dataroot, self.appname)
         return ret
 
 
@@ -295,7 +298,7 @@ class ServerConfig(ClientServerConfig):
     """
 
     loggingprefix = "S"
-    defaultsuffix = "server"
+    defaultscc = "server"
     defaulthost = "*"
     default_flag_log_file = True
 
@@ -328,7 +331,7 @@ class ClientConfig(ClientServerConfig, _WithHistory):
     """
 
     loggingprefix = "C"
-    defaultsuffix = "client"
+    defaultscc = "client"
     defaulthost = "127.0.0.1"
     default_flag_log_file = False
 
@@ -349,7 +352,7 @@ class ConsoleConfig(BaseConfig, _WithHistory):
     """
 
     loggingprefix = "O"
-    defaultsuffix = "console"
+    defaultscc = "console"
     default_flag_log_file = False
 
     def __init__(self, *args, fav=None, **kwargs):

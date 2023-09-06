@@ -9,46 +9,7 @@ from contextlib import redirect_stdout
 import serverlib as sl
 
 
-_powertabulatemap = [
-    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
-     "converter": lambda x: a107.dt2str(a107.to_datetime(x)), },
-    # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
-    {"fieldnames": ("period",),
-     "converter": pl3.QP.to_str},
-    {"fieldnames": ("error", "lasterror",),
-     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
-    {"fieldnames": ("narration",),
-     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
-]
-
-
-def _powertabulate(rows, header, logger=None, *args, **kwargs):
-    def get_logger():
-        return logger if logger is not None else a107.get_python_logger()
-
-    mymap = [[[i for i, h in enumerate(header) if h in row["fieldnames"]], row["converter"]] for row in
-             _powertabulatemap]
-    mymap = [row for row in mymap if row[0]]
-    if mymap:
-        for row in rows:
-            for indexes, converter in mymap:
-                for i in indexes:
-                    try:
-                        if row[i] is not None: row[i] = converter(row[i])
-                    except BaseException as e:
-                        get_logger().info(
-                            f"Error '{a107.str_exc(e)}' while trying to apply convertion to field '{header[i]}' with value {repr(row[i])}")
-                        raise
-
-    return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
-
-
-def _detect_girafales(s):
-    lines = s.split("\n")
-    return any(line.startswith("-") and line.count("-") > len(line)/2 for line in lines)
-
-
-def print_result(ret, logger=None, flag_colors=True):
+def print_result(ret, logger, flag_colors=True):
     from ._api import helpmaking
 
     print_tabulated = a107.print_girafales if flag_colors else print
@@ -56,7 +17,12 @@ def print_result(ret, logger=None, flag_colors=True):
     def handle_all(ret, level=0):
 
         def print_header(k):
-            print(attr('bold')+config.colors.header+"\n".join(a107.format_h(level+1, k))+attr("reset"))
+            print(format_header(k))
+
+        def format_header(k):
+            return ((attr("bold") + config.colors.header if flag_colors else "") +
+                    "\n".join(a107.format_h(level + 1, k)) +
+                    (attr("reset") if flag_colors else ""))
 
         def handle_list(arg):
             if len(arg) > 0:
@@ -105,8 +71,8 @@ def print_result(ret, logger=None, flag_colors=True):
         def handle_status(arg):
             msg = arg.msg if not isinstance(arg.msg, (list, tuple)) else "\n".join(arg.msg)
             if msg:
-                print(f"{config.colors.header}Status:{RESET} {a107.fancilyquoted(msg)}")
-            print_result(arg.ret, logger, flag_colors)  # recursive call to print result in Status object
+                print(f"{format_header('Status:')} {a107.fancilyquoted(msg)}")
+            handle_all(arg.ret, level+1)
 
         def handle_default(arg):
             if not isinstance(arg, str): arg = str(arg)
@@ -139,7 +105,7 @@ def print_result(ret, logger=None, flag_colors=True):
     handle_all(ret, 0)
 
 
-def result2str(ret, logger=None, flag_colors=True):
+def result2str(ret, logger, flag_colors=True):
     """Captures print_result() output to redirect it to a string.
 
     See print_results() for arguments.
@@ -151,3 +117,40 @@ def result2str(ret, logger=None, flag_colors=True):
         print_result(ret, logger, flag_colors)
         output = buf.getvalue()
     return output
+
+
+_powertabulatemap = [
+    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
+     "converter": lambda x: a107.dt2str(a107.to_datetime(x)), },
+    # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
+    {"fieldnames": ("period",),
+     "converter": pl3.QP.to_str},
+    {"fieldnames": ("error", "lasterror",),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
+    {"fieldnames": ("narration",),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
+]
+
+
+def _powertabulate(rows, header, logger, *args, **kwargs):
+
+    mymap = [[[i for i, h in enumerate(header) if h in row["fieldnames"]], row["converter"]] for row in
+             _powertabulatemap]
+    mymap = [row for row in mymap if row[0]]
+    if mymap:
+        for row in rows:
+            for indexes, converter in mymap:
+                for i in indexes:
+                    try:
+                        if row[i] is not None: row[i] = converter(row[i])
+                    except BaseException as e:
+                        logger().error(f"Error '{a107.str_exc(e)}' while trying to apply convertion to field "
+                                      f"'{header[i]}' with value {repr(row[i])}")
+                        raise
+
+    return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
+
+
+def _detect_girafales(s):
+    lines = s.split("\n")
+    return any(line.startswith("-") and line.count("-") > len(line)/2 for line in lines)
