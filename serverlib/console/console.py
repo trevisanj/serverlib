@@ -41,7 +41,8 @@ class Console(_api.WithCommands, _api.WithClosers):
         self.cfg = cfg
         self.flag_needs_to_reset_colors = False
         self._attach_cmd(EssentialConsoleCommands())
-        if cmd is not None: self._attach_cmd(cmd)
+        if cmd is not None:
+            self._attach_cmd(cmd)
         self.__state = CSt.ALIVE
 
         self.name = a107.random_name()
