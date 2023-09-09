@@ -1,11 +1,15 @@
 import serverlib as sl, a107
 
-__all__ = ["ServerCommands_Shelf"]
+__all__ = ["ShelfServerCommands"]
 
-class ServerCommands_Shelf(sl.ServerCommands):
-    def __init__(self, shelf):
+class ShelfServerCommands(sl.ServerCommands):
+
+    @property
+    def shelf(self):
+        return self.master.shelf
+
+    def __init__(self):
         super().__init__()
-        self.shelf = shelf
 
     # ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐  ┌──┐
     # ┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──┘  └──
@@ -39,7 +43,7 @@ class ServerCommands_Shelf(sl.ServerCommands):
     async def shelf_sync(self):
         """Sync'ing a shelf is similar to SQL's commit operation (assuming that writeback==False)
 
-        **Note** ServerCommands_Shelf is not aware of whether the shelf was opened with writeback==True or ==False
+        **Note** ShelsServerCommands is not aware of whether the shelf was opened with writeback==True or ==False
         (see https://docs.python.org/3/library/shelve.html for further explanation)."""
         self.shelf.sync()
 

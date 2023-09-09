@@ -30,7 +30,7 @@ def print_result(ret, logger, flag_colors=True):
                     excluded = ("info",)
                     header = [k for k in arg[0].keys() if k not in excluded]
                     rows = [[v for k, v in row.items() if k not in excluded] for row in arg]
-                    print_tabulated(_powertabulate(rows, header))
+                    print_tabulated(_powertabulate(rows, header, logger))
                 else:
                     print("\n".join([str(x) for x in arg]))  # Experimental: join list elements with "\n"
             else:

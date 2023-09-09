@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 from enum import Enum
 import tabulate
+from serverlib import config
 from . import _api
 
 
@@ -20,151 +21,7 @@ class ServerState(Enum):
     STOPPED = 40  # stopped
 
 
-class _WithSleepers:
-
-    @property
-    def sleepers(self):
-        return self.__sleepers
-
-    def __init__(self):
-        self.__sleepers = {}  # {name: _Sleeper, ...}
-
-    def wake_up(self, sleepername=None):
-        """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
-        if sleepername is not None:
-            self.__sleepers[sleepername].flag_wake_up = True
-        else:
-            for sleeper in self.__sleepers.values(): sleeper.flag_wake_up = True
-
-    async def wait_a_bit(self):
-        """Unified way to wait for a bit, usually before retrying something that goes wront."""
-        await self.sleep(0.1)
-
-    async def sleep(self, waittime, name=None):
-        """
-        Async blocks for waittime seconds, with possibility of premature wake-up using wake_up() method.
-
-        Args:
-            waittime: value in seconds. Also accepts serverlib.Retry, in which case will assume
-                      fallback value ```serverlib.config.retry_waittime```
-            name: optional, unique name. If a sleeper with name already exists, will raise error.
-                  If not passed, will create a random name for the sleeper
-        """
-
-        if isinstance(waittime, sl.Retry):
-            waittime = sl.config.retry_waittime
-        if name is None:
-            name = a107.random_name()
-            while name in self.__sleepers:
-                name = a107.random_name()
-        else:
-            if name in self.__sleepers:
-                raise RuntimeError(f"Sleeper '{name}' already exists")
-
-        my_debug = lambda s: logger.debug(
-            f"😴 {self.__class__.__name__}.sleep() {sleeper.name} {waittime:.3f} seconds {s}")
-        logger = self.logger
-        interval = min(waittime, 0.1)
-
-        sleeper = _Sleeper(waittime, name)
-        self.__sleepers[sleeper.name] = sleeper
-        slept = 0
-        try:
-            my_debug("💤💤💤")
-            while slept < waittime and not sleeper.flag_wake_up:
-                await asyncio.sleep(interval)
-                slept += interval
-        finally:
-            my_debug("⏰ Wake up!")
-            try:
-                del self.__sleepers[sleeper.name]
-            except KeyError:
-                pass
-
-
-@dataclass
-class _Sleeper:
-    seconds: int
-    name: str
-    task: Any = None
-    flag_wake_up: bool = False
-
-
-@dataclass
-class _LoopData:
-    """Encapsulates a @sl.is_loop-decorated method or a sub-server."""
-
-    def __str__(self):
-        return self.methodname
-
-    @property
-    def methodname(self):
-        return self.method.__name__ if self.kind == "own loop" else None
-
-    @property
-    def flag_error(self):
-        return self.exception is not None
-
-    @property
-    def errormessage(self):
-        if self.exception is None:
-            return ""
-        return a107.str_exc(self.exception)
-
-    @property
-    def taskstatus(self):
-        return "no task" if self.task is None \
-            else "looping" if not self.task.done() \
-            else "cancelled" if self.task.cancelled() \
-            else "completed"
-
-    @property
-    def kind(self):
-        return "own loop" if self.method else "subserver"
-
-    @property
-    def detail(self):
-        ret = f"{self.master.__class__.__name__}.{self.methodname}()" if self.kind == "own loop" \
-            else f"{self.scpair.server.__class__.__name__}.run()"
-        return ret
-
-    @property
-    def coroutine(self):
-        return self.method if self.kind == "own loop" else self.scpair.server._run
-    
-    @property
-    def is_mainloop(self):
-        return self.kind == "own loop" and self.methodname.endswith("__mainloop")
-
-    # reference to the server
-    master: Any
-    # awaitable method with the @is_loop decorator. It has precedence over scpair
-    method: Any = None
-    # awaitable method with the @is_loop decorator
-    scpair: sl.SCPair = None
-    # asyncio.Task
-    task: Any = None
-    # exception in case of error
-    exception: BaseException = None
-    # marked to die, like Guts
-    marked: bool = False
-    # method result after awaited on
-    result: Any = None
-    # todo cleanup when I am sure this is no longer an idea to be implemented # whether task was interrupted with KeyboardInterrupt
-    #  flag_interrupted = False
-
-    def to_dict(self):
-        return {"kind": self.kind,
-                "detail": self.detail,
-                "taskstatus": self.taskstatus,
-                "marked": self.marked,
-                "errormessage": self.errormessage,
-                ";)": "💥" if self.errormessage else "",
-                # ";)": "^C" if self.flag_interrupted else "💥" if self.errormessage else "",
-                }
-
-
-class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
+class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleepers):
     """Server class.
 
     Args:
@@ -172,9 +29,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         cmd: instance or list of Servercommands
     """
 
-    @property
-    def logger(self):
-        return self.cfg.logger
+    whatami = "server"
 
     @property
     def state(self):
@@ -184,24 +39,23 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     def loops(self):
         return self.__loops
 
-    def __init__(self, cfg, cmd=None, subservers=None):
-        _api.WithCommands.__init__(self)
+    @property
+    def url(self):
+        return sl.hopo2url((self.cfg.host, self.cfg.port))
+
+    def __init__(self, cfg, description=None, cmd=None, subservers=None):
+        _api.WithCfg.__init__(self, cfg, description)
+        _api.WithCommands.__init__(self, [sl.BasicServerCommands(), cmd])
         _api.WithClosers.__init__(self)
-        _WithSleepers.__init__(self)
+        _api.WithSleepers.__init__(self)
+
 
         self.__state = ServerState.INIT
-        self.cfg = cfg
-        cfg.master = self
         self.__loops = None  # {methodname0: task0, ...}
-
-        self._attach_cmd(sl.BasicServerCommands())
-        if cmd is not None:
-            self._attach_cmd(cmd)
-
         self.__subservers = _get_scpairs(subservers)
-
         self.__state = ServerState.ALIVE
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # ┌─┐┬  ┬┌─┐┬─┐┬─┐┬┌┬┐┌─┐  ┌┬┐┌─┐
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤
     # └─┘ └┘ └─┘┴└─┴└─┴─┴┘└─┘  ┴ ┴└─┘
@@ -212,6 +66,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
     async def _on_getd_all(self, statedict):
         """Override this to add elements to statedict in response to server command "s_getd_all"."""
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
     # │ │└─┐├┤   │││├┤
     # └─┘└─┘└─┘  ┴ ┴└─┘
@@ -229,8 +84,36 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         """
         await self._run(0)
 
+    def get_welcome(self):
+        """Console welcome message."""
+        slugtitle = f"Welcome to the '{self.subappname}' {self.whatami}"
+        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
+        description = self.description
+        if description:
+            ret += "\n"+a107.kebab(description, config.descriptionwidth)
+        return ret
+
+    def stop(self):
+        """Stops server by cancelling all tasks in self.__loops"""
+        if self.__loops is not None:
+            for loopdata in self.__loops:
+                if not loopdata.marked:
+                    loopdata.marked = True
+                    # print(f"stop() cancelling {task}")
+                    loopdata.task.cancel()
+
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
+    # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
+    # ┴─┘└─┘┴ ┴ └┘ └─┘  ┴ ┴└─┘  ┴ ┴┴─┘└─┘┘└┘└─┘
+
     async def _run(self, level):
-        """Recursive run with level"""
+        """
+        Recursive run with level.
+
+        Q: Why not __run()?
+        A: This method is called by "superserver".
+        """
 
         #########
         # RUN API
@@ -249,9 +132,9 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
 
             coro = loopdata.coroutine
             # If subserver, increments level
-            awaitable = coro(level+1) if loopdata.kind != "own loop" else coro()
+            awaitable = coro(level + 1) if loopdata.kind != "own loop" else coro()
             try:
-                if not loopdata.is_mainloop: 
+                if not loopdata.is_mainloop:
                     # other loops wait until main loop is ready
                     while self.state != ServerState.LOOP:
                         await asyncio.sleep(0.01)
@@ -276,7 +159,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 for s in get_tabulatedloops():
                     self.logger.error(s)
                 self.logger.error("")
-                self.cfg.logger.exception(f"Cause of crash follows.")
+                self.logger.exception(f"Cause of crash follows.")
 
                 raise
 
@@ -284,7 +167,6 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             loopdata = _LoopData(master=self, method=method, scpair=scpair)
             loopdata.task = asyncio.create_task(loopcoro(loopdata), name=loopdata.detail)
             return loopdata
-
 
         # === CREATES LOOPDATA, INCLUDING ASYNC TASKS
         self.__loops = []
@@ -294,39 +176,24 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
         for scpair in self.__subservers:
             self.__loops.append(create_loopdata(scpair=scpair))
 
-
         try:
             await asyncio.gather(
                 *[loopdata.task for loopdata in self.__loops],
                 return_exceptions=False,  # if any loop crashes the whole server crashes
-                )
+            )
         except BaseException as e:
-            self.logger.error(f"🔥 {self.cfg.subappname} (level {level}) ended with exception: {a107.str_exc(e)}")
+            self.logger.error(f"🔥 {self.subappname} (level {level}) ended with exception: {a107.str_exc(e)}")
             if level > 0:
                 # Exceptions are propagated until level 0 and then suppressed
                 raise
             return False
-
-        return True
 
         # === LOGGING
         self.logger.debug(f"*** Server {self.cfg.subappname} finished execution ***")
         for s in get_tabulatedloops():
             self.logger.debug(s)
 
-
-    def stop(self):
-        """Stops server by cancelling all tasks in self.__loops"""
-        if self.__loops is not None:
-            for loopdata in self.__loops:
-                if not loopdata.marked:
-                    loopdata.marked = True
-                    # print(f"stop() cancelling {task}")
-                    loopdata.task.cancel()
-
-    # ┬  ┌─┐┌─┐┬  ┬┌─┐  ┌┬┐┌─┐  ┌─┐┬  ┌─┐┌┐┌┌─┐
-    # │  ├┤ ├─┤└┐┌┘├┤   │││├┤   ├─┤│  │ ││││├┤
-    # ┴─┘└─┘┴ ┴ └┘ └─┘  ┴ ┴└─┘  ┴ ┴┴─┘└─┘┘└┘└─┘
+        return True
 
     @sl.is_loop
     async def __mainloop(self):
@@ -367,7 +234,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 self.logger.info(message)
                 exception = sl.StatementError(message)
             else:
-                self.cfg.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
+                self.logger.info(f"$ {commandname}{' ...' if has_data else ''}")
             # Processes data
             if command:
                 data = [[], {}] if len(bdata) == 0 else [[bdata], {}] if command.flag_bargs else pickle.loads(bdata)
@@ -413,9 +280,9 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
             signal.signal(signal.SIGTSTP, _ctrl_z_handler)
             signal.signal(signal.SIGTERM, _ctrl_z_handler)
 
-            self.cfg.read_configfile()
-            if a107.ensure_path(self.cfg.datadir):
-                self.logger.info(f"Created directory '{self.cfg.datadir}'")
+            self.read_configfile()
+            if a107.ensure_path(self.datadir):
+                self.logger.info(f"Created directory '{self.datadir}'")
             ctx = zmq.asyncio.Context()
             sl.lowstate.numcontexts += 1
             sck_rep = ctx.socket(zmq.REP)
@@ -423,10 +290,10 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
 
             # === BINDING
             try:
-                self.cfg.logger.info(f"Binding ``{self.cfg.subappname}'' (REP) to {self.cfg.url} at {a107.now_str()} ...")
-                sck_rep.bind(self.cfg.url)
+                self.logger.info(f"Binding ``{self.subappname}'' (REP) to {self.url} at {a107.now_str()} ...")
+                sck_rep.bind(self.url)
             except zmq.ZMQError as e:
-                self.logger.error(f"Cannot bind to {self.cfg.url}: {a107.str_exc(e)}")
+                self.logger.error(f"Cannot bind to {self.url}: {a107.str_exc(e)}")
                 raise
 
             await self._initialize_cmd()
@@ -439,18 +306,18 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                     did_sth = await recv_send()
                     if not did_sth:
                         # Sleeps because tired of doing nothing
-                        if self.cfg.sleepinterval > 0:
-                            await asyncio.sleep(self.cfg.sleepinterval)
+                        if self.sleepinterval > 0:
+                            await asyncio.sleep(self.sleepinterval)
             except asyncio.CancelledError:
                 raise
             # except KeyboardInterrupt:
             #     return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
             # except:
-            #     self.cfg.logger.exception(f"Server '{self.cfg.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
+            #     self.logger.exception(f"Server '{self.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
             #     raise
             finally:
                 self.__state = ServerState.STOPPED
-                self.cfg.logger.debug(f"{self.__class__.__name__}.__mainloop() finally'")
+                self.logger.debug(f"{self.__class__.__name__}.__mainloop() finally'")
                 self.wake_up()
 
                 # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
@@ -463,7 +330,7 @@ class Server(_api.WithCommands, _api.WithClosers, _WithSleepers):
                 ctx.destroy()
                 sl.lowstate.numcontexts -= 1
         finally:
-            self.cfg.logger.info(f"Exiting {self.__class__.__name__}.__mainloop()")
+            self.logger.info(f"Exiting {self.__class__.__name__}.__mainloop()")
 
 
 def _get_scpairs(scpairs):
@@ -482,3 +349,79 @@ def _get_scpairs(scpairs):
         else:
             raise ValueError(f"Cannot convert item #{i} to serverlib.SCPair")
     return ret
+
+# ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class _LoopData:
+    """Encapsulates a @sl.is_loop-decorated method or a sub-server."""
+
+    def __str__(self):
+        return self.methodname
+
+    @property
+    def methodname(self):
+        return self.method.__name__ if self.kind == "own loop" else None
+
+    @property
+    def flag_error(self):
+        return self.exception is not None
+
+    @property
+    def errormessage(self):
+        if self.exception is None:
+            return ""
+        return a107.str_exc(self.exception)
+
+    @property
+    def taskstatus(self):
+        return "no task" if self.task is None \
+            else "looping" if not self.task.done() \
+            else "cancelled" if self.task.cancelled() \
+            else "completed"
+
+    @property
+    def kind(self):
+        return "own loop" if self.method else "subserver"
+
+    @property
+    def detail(self):
+        ret = f"{self.master.__class__.__name__}.{self.methodname}()" if self.kind == "own loop" \
+            else f"{self.scpair.server.__class__.__name__}.run()"
+        return ret
+
+    @property
+    def coroutine(self):
+        return self.method if self.kind == "own loop" else self.scpair.server._run
+
+    @property
+    def is_mainloop(self):
+        return self.kind == "own loop" and self.methodname.endswith("__mainloop")
+
+    # reference to the server
+    master: Any
+    # awaitable method with the @is_loop decorator. It has precedence over scpair
+    method: Any = None
+    # awaitable method with the @is_loop decorator
+    scpair: sl.SCPair = None
+    # asyncio.Task
+    task: Any = None
+    # exception in case of error
+    exception: BaseException = None
+    # marked to die, like Guts
+    marked: bool = False
+    # method result after awaited on
+    result: Any = None
+
+    # todo cleanup when I am sure this is no longer an idea to be implemented # whether task was interrupted with KeyboardInterrupt
+    #  flag_interrupted = False
+
+    def to_dict(self):
+        return {"kind": self.kind,
+                "detail": self.detail,
+                "taskstatus": self.taskstatus,
+                "marked": self.marked,
+                "errormessage": self.errormessage,
+                ";)": "💥" if self.errormessage else "",
+                # ";)": "^C" if self.flag_interrupted else "💥" if self.errormessage else "",
+                }

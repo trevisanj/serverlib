@@ -21,7 +21,7 @@ class DBServer(sl.Server):
             self.dbfile = self._append_closer(fileclass(self.cfg.dbpath, master=self))
         if flag_shelf:
             self.shelf = self._append_closer(shelve.open(self.cfg.shelfpath))
-            self._attach_cmd(sl.ServerCommands_Shelf(self.shelf))
+            self._attach_cmd(sl.ShelfServerCommands())
         if self.dbfile:
             self._attach_cmd(sl.DBServerCommands_FileSQLite())
 

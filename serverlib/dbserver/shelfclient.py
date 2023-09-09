@@ -5,7 +5,9 @@ __all__ = ["ShelfClient"]
 
 class ShelfClient:
     """Accesses shelf throught self.dbclient."""
+
     dbclient: sl.Client
+
     async def shelf_get(self, key, default=None):
         # try:
         #     return await self.dbclient.execute_server("shelf_get", key)

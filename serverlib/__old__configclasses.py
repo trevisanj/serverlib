@@ -20,7 +20,7 @@ class BaseConfig:
         level:
         datadir:
         subappname: Used in filenames and welcome message
-        scc: "server", "client" or "console". Can be customized
+        whatami: "server", "client" or "console". Can be customized
         description:
         cfg: another BaseConfig. If passed, appname and subappname will be taken from this cfg.
              It has precedence over appname and subappname passed as arguments
@@ -49,11 +49,11 @@ class BaseConfig:
         return self.__subappname if self.__subappname is not None else self.appname
 
     @property
-    def scc(self):
+    def whatami(self):
         return self.__scc if self.__scc is not None else self.defaultscc
 
-    @scc.setter
-    def scc(self, value):
+    @whatami.setter
+    def whatami(self, value):
         self.__scc = value
 
     @property
@@ -90,10 +90,6 @@ class BaseConfig:
         return os.path.join(self.datadir, "log", f"{self.subappname}{self.dash_suffix_or_not()}.log")
 
     @property
-    def stoppath(self):
-        return os.path.join(self.datadir, f"stop-{self.subappname}")
-
-    @property
     def logger(self):
         if self.__logger is None:
             flag_created_dir = False
@@ -121,7 +117,7 @@ class BaseConfig:
                  datadir=None,
                  logginglevel=None,
                  subappname=None,
-                 scc=None,
+                 whatami=None,
                  description=None,
                  cfg=None,
                  ):
@@ -142,7 +138,7 @@ class BaseConfig:
         self.description = description
         self.__datadir = datadir
         self.__subappname = subappname
-        self.__scc = scc
+        self.__scc = whatami
 
         self.master = None  # Server or Client
         self.__logger = None
@@ -155,17 +151,17 @@ class BaseConfig:
         """Eventually prefixes suffix with a "-"
 
         Args:
-            suffix: defaults to self.scc
+            suffix: defaults to self.whatami
 
         Returns:
-            "-"+(suffix or self.scc), or ""
+            "-"+(suffix or self.whatami), or ""
 
             a) if suffix is empty, returns ""
             b) if suffix starts with ".", does not precede suffix with a "-"
             c) if suffix is not empty and does not start with a (".", "-"), precedes it with a "-"
         """
         if suffix is None:
-            suffix = self.scc
+            suffix = self.whatami
         if not suffix: return ""
         if suffix.startswith((".", "-")):
             return suffix
@@ -184,11 +180,6 @@ class BaseConfig:
             2. './<self.configfilename>'
 
         Both files will be used if present; settings in (2) may ovewrite settings in (1) above.
-
-        Use case: one way to create a custom "client" directory is to:
-            - run ```saccapoke.py```
-            - copy ~/.sacca/cfg/*client.cfg to some directory
-            - then change whatever you want
         """
 
         def _populate_self(h):
@@ -207,30 +198,30 @@ class BaseConfig:
             h = self.__get_configobj_with_path(localpath, False)
             _populate_self(h)
 
-    def get(self, attrname, default=None):
+    def get_option(self, attrname, default=None):
         """Retrieves attribute with default option."""
         return getattr(self, attrname) if hasattr(self, attrname) else default
 
-    def set(self, attrname, value):
+    def set_option(self, attrname, value):
         """Sets value both as self's attribute and within the config file."""
         setattr(self, attrname, value)
         h = self.__get_configobj()
         h[attrname] = value
         h.write()
 
-    def filepath(self, suffix):
-        """Makes path <datadir>/<subappname><suffix>.
+    def filepath(self, *args):
+        """
+        Makes path using datadir and automatic filename
 
-        Example of suffix: "-vars.pickle"
+        Args: [subdir0, subdir1, ..., suffix]
+
+        Returns:
+            ret: path to file
+
+        Example:
+            filepath("console", ".history") --> "<datadir>/console/<subappname>.history"
         """
         return os.path.join(self.datadir, f"{self.subappname}{self.dash_suffix_or_not(suffix)}")
-
-    def get_welcome(self):
-        slugtitle = f"Welcome to the '{self.subappname}' {self.scc}"
-        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
-        if self.description:
-            ret += "\n"+a107.kebab(self.description, config.descriptionwidth)
-        return ret
 
     def __get_configobj_with_path(self, path_, flag_create_empty):
         """Gets config for specific file path."""
@@ -256,9 +247,6 @@ class BaseConfig:
 
     def __make_autodir(self):
         dataroot = os.getenv(sl.config.datarootenvvar)
-        # todo cleanup can't use logger here, so had to print print("\n\n\n\n\n===============  LASQUEIRAAAAAAAAAAAA", self.subappname, sl.config.datarootenvvar, dataroot)
-        #  traceback.print_stack()
-        #  print("=================\n")
         if not dataroot:
             dataroot = sl.config.defaultdataroot
         if "~" in dataroot:
@@ -300,7 +288,6 @@ class ServerConfig(ClientServerConfig):
     loggingprefix = "S"
     defaultscc = "server"
     defaulthost = "*"
-    default_flag_log_file = True
 
     def __init__(self, *args, sleepinterval=0.01, **kwargs):
         super().__init__(*args, **kwargs)
@@ -320,9 +307,6 @@ class _WithHistory:
 class ClientConfig(ClientServerConfig, _WithHistory):
     """Configuration for clients.
 
-    Introduces the concept of "own identity", as a client may assume the subappname and description of
-    the server, or use own subappname and description.
-
     Also now consoles and clients have "favourites" ability
 
     Args:
@@ -333,13 +317,11 @@ class ClientConfig(ClientServerConfig, _WithHistory):
     loggingprefix = "C"
     defaultscc = "client"
     defaulthost = "127.0.0.1"
-    default_flag_log_file = False
 
-    def __init__(self, *args, flag_ownidentity=False, fav=None, **kwargs):
+    def __init__(self, *args, fav=None, **kwargs):
         super().__init__(*args, **kwargs)
         if fav is None: fav = []
         self.fav = fav
-        self.flag_ownidentity = flag_ownidentity
 
 
 class ConsoleConfig(BaseConfig, _WithHistory):
@@ -353,9 +335,9 @@ class ConsoleConfig(BaseConfig, _WithHistory):
 
     loggingprefix = "O"
     defaultscc = "console"
-    default_flag_log_file = False
 
     def __init__(self, *args, fav=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if fav is None: fav = []
+        if fav is None:
+            fav = []
         self.fav = fav

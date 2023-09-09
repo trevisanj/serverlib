@@ -46,8 +46,8 @@ def cli_server(server_or_cfg):
 
     server, cfg, _ = sl.get_server_and_cfg(server_or_cfg)
 
-    parser = argparse.ArgumentParser(description="????????????????????????????????????????????????", formatter_class=a107.SmartFormatter)
-    parser.add_argument("--host", type=str, required=False, default=cfg.defaulthost,
+    parser = argparse.ArgumentParser(description=server.description, formatter_class=a107.SmartFormatter)
+    parser.add_argument("--host", type=str, required=False, default=cfg.host,
                         help="Host: setting this option allows to bind to a different host")
     parser.add_argument('-p', '--port', type=float, default=cfg.port, required=False, help="Port")
     args = parser.parse_args()
@@ -178,7 +178,7 @@ Descriptions of commands:
             await server.run()
         elif args.command == "ping":
             try:
-                print(f"Pinging server (timeout={sl.config.clienttimeout:g} seconds)...")
+                print(f"Pinging server (timeout={sl.config.defaultclienttimeout:g} seconds)...")
                 print(await client.execute_server('s_ping'))
             except (KeyboardInterrupt, asyncio.CancelledError):
                 print("Interrupted")

@@ -2,9 +2,7 @@
 Basic conversion routines
 """
 
-
 __all__ = ["hopo2url", "cfg2str", "cfg2dict"]
-
 
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):
@@ -30,6 +28,7 @@ def hopo2url(hopo, fallbackhost="127.0.0.1"):
     return h if port is None else f"{h}:{port}"
 
 
+# todo c'mon, I could call cfg2dict first, was I stoned when I did this???
 def cfg2str(cfg, flag_clean=True):
     """Converts config object to string.
 
@@ -60,11 +59,11 @@ def cfg2dict(cfg, flag_clean=True):
         """
     ret = {}
     for attrname in dir(cfg):
-        if not attrname.startswith("_"):
+        if not attrname.startswith("__"):
             attr = getattr(cfg, attrname)
             s = repr(attr)
             if flag_clean and s[0] == "<":
                 continue
             ret[attrname] = attr
-
+    print("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", ret)
     return ret

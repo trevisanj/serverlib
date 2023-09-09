@@ -11,14 +11,13 @@ from .. import _api
 class BasicServerCommands(ServerCommands):
     @is_command
     async def s_get_welcome(self):
-        return self.master.cfg.get_welcome()
+        return self.master.get_welcome()
 
     @is_command
     async def s_poke(self):
         """Prints and returns the server subappname (useful to identify what is running in a terminal)."""
-        # print(f"👉 {self.cfg.subappname}")  # 👈")
-        print(f"{fg('white')}{attr('bold')}{self.cfg.subappname}{attr('reset')} 👈")
-        return self.cfg.subappname
+        print(f"{fg('white')}{attr('bold')}{self.master.subappname}{attr('reset')} 👈")
+        return self.master.subappname
 
     @is_command
     async def s_help(self, what=None, flag_docstrings=False, refilter=None, fav=None, favonly=False):
@@ -35,15 +34,14 @@ class BasicServerCommands(ServerCommands):
             serverlib.HelpData or serverlib.HelpItem
         """
         if what is None:
-            cfg = self.master.cfg
-            helpdata = _api.make_helpdata(title=cfg.subappname,
-                                        description=cfg.description,
-                                        cmd=self.master.cmd,
-                                        flag_protected=True,
-                                        flag_docstrings=flag_docstrings,
-                                        refilter=refilter,
-                                        fav=fav,
-                                        favonly=favonly)
+            helpdata = _api.make_helpdata(title=self.master.subappname,
+                                          description=self.master.description,
+                                          cmd=self.master.cmd,
+                                          flag_protected=True,
+                                          flag_docstrings=flag_docstrings,
+                                          refilter=refilter,
+                                          fav=fav,
+                                          favonly=favonly)
             return helpdata
         else:
             if what not in self.master.metacommands:
@@ -99,7 +97,7 @@ class BasicServerCommands(ServerCommands):
 
     @is_command
     async def s_getd_cfg(self):
-        return self.cfg.to_dict()
+        return sl.cfg2dict(self.cfg)
 
     @is_command
     async def s_getd_all(self):

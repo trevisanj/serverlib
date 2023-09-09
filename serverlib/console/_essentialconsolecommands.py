@@ -23,7 +23,10 @@ class EssentialConsoleCommands(sl.ConsoleCommands):
             fav.remove(what)
         else:
             fav.append(what)
-        self.master.cfg.set("fav", fav)
+
+        # todo test this
+        self.master.shelf["fav"] = fav
+        self.master.shelf.sync()
 
     @sl.is_command
     async def get_fav(self):

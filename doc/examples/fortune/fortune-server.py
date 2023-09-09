@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """A fucked-up fortune teller with sentences based on my online therapy sessions at BetterHelp."""
 import serverlib as sl, a107, argparse, random as ra, textwrap, asyncio
+import cfgs
 
 
 FORTUNES = {
@@ -51,7 +52,6 @@ class FortuneCommands(sl.ServerCommands):
             ret = bound_method
             return ret
 
-
         for topic in FORTUNES.keys():
             method = genericcommand(topic)
             setattr(self, topic, method)
@@ -60,9 +60,5 @@ class FortuneCommands(sl.ServerCommands):
 
 
 if __name__ == "__main__":
-    cfg = sl.ServerConfig(appname="fortune",
-                                 port=6666,
-                                 flag_log_console=True,
-                                 description=__doc__)
-    server = sl.Server(cfg, cmd=FortuneCommands())
+    server = sl.Server(cfg=cfgs.server, description=__doc__, cmd=FortuneCommands())
     sl.cli_server(server)

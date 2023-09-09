@@ -7,13 +7,18 @@ class NotAConsoleCommand(Exception):
 
 
 class Retry(Exception):
-    """Attempt to unify my network error reporting to users of this library (inspired in zmq.Again)."""
+    """
+    Thrown in case of failed operation, but there is hope is retried.
 
-    # todo cleanup def __init__(self, *args, waittime=None, **kwargs):
-    #     import serverlib as sl
-    #     super().__init__(*args, **kwargs)
-    #     # Use to hint how much time should pass before retrying
-    #     self.waittime = waittime if waittime is not None else sl.config.retry_waittime
+    This exception may optionally carry a suggested time to wait before retrying. For instance, the agent server
+    catches this and used this time if available.
+
+    This class was inspired by zmq.Again.
+    """
+
+    def __init__(self, *args, waittime=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.waittime = waittime
 
 
 class MismatchError(Exception):

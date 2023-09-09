@@ -89,7 +89,8 @@ class AgentServer(sl.DBServer):
                 try:
                     await review_agents()
                 except sl.Retry as e:
-                    await self.sleep(sl.config.retry_waittime, _SLEEPERNAME)
+                    waittime = sl.config.retry_waittime if e.waittime is None else e.waittime
+                    await self.sleep(waittime, _SLEEPERNAME)
                 else:
                     await self.sleep(self.cfg.agentloopinterval, _SLEEPERNAME)
         finally:
@@ -181,10 +182,9 @@ class AgentServer(sl.DBServer):
                     waittime = 0
                     if item.action == TaskAction.retry:
                         task.state = TaskState.idle
-                        # todo cleanup I got rid of sl.Retry.waittime
-                        # assert isinstance(e, sl.Retry)
-                        # waittime = e.waittime
                         waittime = sl.config.retry_waittime
+                        if isinstance(e, sl.Retry) and e.waittime:
+                            waittime = e.waittime
                         task.nexttime = time.time() + waittime
                     elif item.action == TaskAction.suspend:
                         task.state = TaskState.suspended
@@ -288,8 +288,9 @@ class AgentServer(sl.DBServer):
                             await self.sleep(waittime, agentname)
 
                     except sl.Retry as e:
-                        self.logger.error(f"{A} Error: {a107.str_exc(e)} (will retry)")
-                        await self.sleep(e, agentname)
+                        waittime = sl.config.retry_waittime if e.waittime is None else e.waittime
+                        self.logger.error(f"{A} Error: {a107.str_exc(e)} (will retry in {waittime} seconds)")
+                        await self.sleep(waittime, agentname)
                         continue
 
             finally:

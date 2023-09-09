@@ -1,3 +1,4 @@
+from .cfgclasses import *
 from .decorators import *
 from .basicconversion import *
 from .basicapi import *
@@ -5,7 +6,6 @@ from .status import *
 from .errors import *
 from .config import *
 from .lowstate import *
-from .configclasses import *
 from .intelligence import *
 from .commands import *
 from .console import *

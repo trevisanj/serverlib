@@ -2,9 +2,9 @@
 Miscellaneous routines that are part of serverlib itself, but may be used externally as well
 """
 
-__all__ = ["retry_on_cancelled", "get_client_and_cfg", "get_server_and_cfg", "SCPair"]
+__all__ = ["retry_on_cancelled", "get_client_and_cfg", "get_server_and_cfg", "SCPair", "get_dataroot"]
 
-import asyncio, a107
+import asyncio, a107, os
 import serverlib as sl
 
 
@@ -98,3 +98,18 @@ class SCPair:
     def __init__(self, server_or_cfg, client_or_cfg):
         self.server, self.servercfg, self.flag_instantiated_server = get_server_and_cfg(server_or_cfg)
         self.client, self.clientcfg, self.flag_instantiated_client = get_client_and_cfg(client_or_cfg)
+
+
+def get_dataroot():
+    """
+    Returns serverlib dataroot
+
+    Dataroot may be defined by environment variable or internal default (see serverlib.config module).
+    """
+
+    dataroot = os.getenv(sl.config.datarootenvvar)
+    if not dataroot:
+        dataroot = sl.config.defaultdataroot
+    if "~" in dataroot:
+        dataroot = os.path.expanduser(dataroot)
+    return dataroot

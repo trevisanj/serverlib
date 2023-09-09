@@ -1,6 +1,6 @@
 __all__ = ["Console"]
 
-import atexit, sys, signal, readline, tabulate, a107, time, serverlib as sl, os
+import atexit, sys, signal, readline, a107, time, serverlib as sl, os, random
 from contextlib import redirect_stdout
 from colored import attr
 
@@ -10,12 +10,13 @@ from . import _capi
 from ._capi import CSt
 from ._essentialconsolecommands import EssentialConsoleCommands
 
+RESET = attr("reset")
 
 # I have to disable this, otherwise any input() result will be automatically added to history.
 readline.set_auto_history(False)
 
 
-class Console(_api.WithCommands, _api.WithClosers):
+class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsole):
     """
     Console is the base class for serverlib.Client
 
@@ -23,26 +24,20 @@ class Console(_api.WithCommands, _api.WithClosers):
     such as pl3.WDB2Console
     """
 
-    # "console" or "client" (will be set by "client" subclass)
-    what = "console"
+    loggingprefix = "O"
+    whatami = "console"
 
     @property
     def state(self):
         return self.__state
 
-    @property
-    def logger(self):
-        return self.cfg.logger
-
     def __init__(self, cfg, cmd=None):
-        _api.WithCommands.__init__(self)
+        _api.WithCfg.__init__(self, cfg)
+        _api.WithCommands.__init__(self, [EssentialConsoleCommands(), cmd])
         _api.WithClosers.__init__(self)
+        _api.WithConsole.__init__(self)
         self.__state = CSt.INIT
-        self.cfg = cfg
         self.flag_needs_to_reset_colors = False
-        self._attach_cmd(EssentialConsoleCommands())
-        if cmd is not None:
-            self._attach_cmd(cmd)
         self.__state = CSt.ALIVE
 
         self.name = a107.random_name()
@@ -105,9 +100,9 @@ class Console(_api.WithCommands, _api.WithClosers):
             while True:
                 self.flag_needs_to_reset_colors = True
                 readline.set_auto_history(True)
-                st = input("{}{}{}>".format(config.colors.input, attr("bold"), prompt))
+                st = input("{}{}>".format(config.colors.input, prompt))
                 readline.set_auto_history(False)
-                print(attr("reset"), end="")
+                print(RESET, end="")
                 self.flag_needs_to_reset_colors = False
 
                 if not st:
@@ -138,7 +133,7 @@ class Console(_api.WithCommands, _api.WithClosers):
             return await self._do_help_what(what)
         else:
             refilter = None if what is None else what.replace("*", ".*")
-            return await self._do_help(refilter=refilter, fav=self.cfg.fav, favonly=favonly)
+            return await self._do_help(refilter=refilter, fav=self.fav, favonly=favonly)
 
     async def close(self):
         await _api.WithClosers.close(self)
@@ -158,15 +153,21 @@ class Console(_api.WithCommands, _api.WithClosers):
         return await self._execute_console()
 
     async def _get_prompt(self):
-        return self.cfg.subappname
+        return self.subappname
 
     async def _get_welcome(self):
-        return self.cfg.get_welcome()
+        """Console welcome message."""
+        slugtitle = f"Welcome to the '{self.subappname}' {self.whatami}"
+        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
+        description = self.description
+        if description:
+            ret += "\n"+a107.kebab(description, config.descriptionwidth)
+        return ret
 
     async def _do_help(self, refilter=None, fav=None, favonly=False):
         cfg = self.cfg
-        helpdata = _api.make_helpdata(title=cfg.subappname,
-                                      description=cfg.description,
+        helpdata = _api.make_helpdata(title=self.subappname,
+                                      description=self.description,
                                       cmd=self.cmd, flag_protected=True,
                                       refilter=refilter,
                                       fav=fav,
@@ -188,8 +189,8 @@ class Console(_api.WithCommands, _api.WithClosers):
     async def _do_help_what(self, commandname):
         if commandname in self.metacommands:
 
-            return _api.format_method(_api.make_helpitem(self.metacommands[commandname], True, self.cfg.fav))
-        raise sl.NotAConsoleCommand(f"Not a {self.what} command: '{commandname}'")
+            return _api.format_method(_api.make_helpitem(self.metacommands[commandname], True, self.fav))
+        raise sl.NotAConsoleCommand(f"Not a {self.whatami} command: '{commandname}'")
 
     # PROTECTED (NOT OVERRIDABLE)
 
@@ -207,7 +208,7 @@ class Console(_api.WithCommands, _api.WithClosers):
 
     async def _assure_initialized(self):
         if self.__state < CSt.INITIALIZED:
-            self.cfg.read_configfile()
+            self.read_configfile()
             await self._initialize_cmd()
             await self._initialize_client()
             await self._on_initialize()
@@ -218,7 +219,7 @@ class Console(_api.WithCommands, _api.WithClosers):
     async def _execute_console(self):
         data = self._statementdata
         if not data.commandname in self.metacommands:
-            raise sl.NotAConsoleCommand(f"Not a {self.what} command: '{data.commandname}'")
+            raise sl.NotAConsoleCommand(f"Not a {self.whatami} command: '{data.commandname}'")
         meta = self.metacommands[data.commandname]
         method = meta.method
         if meta.flag_awaitable:
@@ -228,7 +229,7 @@ class Console(_api.WithCommands, _api.WithClosers):
         return ret
 
     def __write_history(self):
-        path_ = self.cfg.historypath
+        path_ = self.historypath
         self.logger.debug(f"Writing history to file '{path_}'")
         dir_ = os.path.split(path_)[0]
         if a107.ensure_path(dir_):
@@ -258,7 +259,7 @@ class Console(_api.WithCommands, _api.WithClosers):
     def __set_historylength(self):
         """Sets history length. default history len is -1 (infinite), which may grow unruly."""
         try:
-            readline.read_history_file(self.cfg.historypath)
+            readline.read_history_file(self.historypath)
         except FileNotFoundError:
             pass
         else:

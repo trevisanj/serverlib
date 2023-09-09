@@ -21,14 +21,7 @@ class Intelligence(_api.WithClosers):
 
     @property
     def logger(self):
-        if self.__logger is None:
-            if self.master and hasattr(self.master, "logger"):
-                self.__logger = self.master.logger
-            elif self.master and hasattr(self.master, "cfg") and hasattr(self.master.cfg, "logger"):
-                self.__logger = self.master.cfg.logger
-            else:
-                self.__logger = a107.get_python_logger()
-        return self.__logger
+        return self.master.logger
 
     @property
     def cfg(self):

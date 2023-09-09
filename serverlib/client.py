@@ -11,18 +11,14 @@ class Client(sl.Console):
         timeout: time to wait for server response (seconds)
     """
 
-    what = "client"
+    whatami = "client"
 
     @property
-    def socket(self):
-        self.__assure_socket()
-        return self.__socket
+    def url(self):
+        return sl.hopo2url((self.cfg.host, self.cfg.port))
 
-    def __init__(self, *args, timeout=sl.config.clienttimeout, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Timeout for the communications with the server
-        self.timeout = timeout
 
         # Temporary timeout (seconds) to be used only once when server command is executed
         # It is reset by any of the execute*() methods
@@ -82,20 +78,23 @@ class Client(sl.Console):
 
     async def _initialize_client(self):
         self.__assure_socket()
-        srvcfg = await self.__execute_server_no_init("s_getd_cfg")
-        if self.cfg.subappname != srvcfg["subappname"]:
+        server_subappname = await self._get_server_subappname()
+        # todo I am still unsure if this comparison is really necessary. Maybe for the sake of avoiding mistakes
+        if self.subappname != server_subappname:
             raise sl.MismatchError(f'Client x Server subappname mismatch '
-                                   f'(\'{self.cfg.subappname}\' x \'{srvcfg["subappname"]}\')')
+                                   f'(\'{self.subappname}\' x \'{server_subappname}\')')
+
+    async def _get_server_subappname(self):
+        srvcfg = await self.__execute_server_no_init("s_getd_cfg")
+        ret = srvcfg["_subappname"]
+        if ret is None:
+            ret = srvcfg["_appname"]
+        return ret
 
     async def _get_prompt(self):
-        if self.cfg.flag_ownidentity:
-            return await super()._get_prompt()
-        srvcfg = await self.execute_server("s_getd_cfg")
-        return srvcfg["subappname"]
+        return await self._get_server_subappname()
 
     async def _get_welcome(self):
-        if self.cfg.flag_ownidentity:
-            return await super()._get_welcome()
         return await self.execute_server("s_get_welcome")
 
     async def _do_close(self):
@@ -117,21 +116,19 @@ class Client(sl.Console):
 
     async def _do_help(self, refilter=None, fav=None, favonly=None):
         helpdata_server = await self.execute_server("s_help", refilter=refilter, fav=fav, favonly=favonly)
-        cfg = self.cfg
-        helpdata = _api.make_helpdata(title=cfg.subappname,
-                                    description=cfg.description,
-                                    cmd=self.cmd,
-                                    flag_protected=True,
-                                    refilter=refilter,
-                                    fav=fav,
-                                    favonly=favonly)
+        helpdata = _api.make_helpdata(title=self.subappname,
+                                      description=self.description,
+                                      cmd=self.cmd,
+                                      flag_protected=True,
+                                      refilter=refilter,
+                                      fav=fav,
+                                      favonly=favonly)
         helpdata.groups = helpdata.groups+helpdata_server.groups
         if not refilter and not favonly:
             specialgroup = await self._get_help_specialgroup()
             helpdata.groups = [specialgroup]+helpdata.groups
-        if not self.cfg.flag_ownidentity:
-            helpdata.title = helpdata_server.title
-            helpdata.description = helpdata_server.description
+        helpdata.title = helpdata_server.title
+        helpdata.description = helpdata_server.description
         text = _api.make_text(helpdata)
         return text
 
@@ -141,7 +138,7 @@ class Client(sl.Console):
             return await super()._do_help_what(commandname)
         except sl.NotAConsoleCommand:
             # Note: it is not the best way to send the list of favourites to the server ... but whatever
-            return _api.format_method(await self.execute_server("s_help", commandname, fav=self.cfg.fav))
+            return _api.format_method(await self.execute_server("s_help", commandname, fav=self.fav))
 
     # PRIVATE
 
@@ -149,9 +146,9 @@ class Client(sl.Console):
         self.__del_socket()
         self.__socket = self.__ctx.socket(zmq.REQ)
         sl.lowstate.numsockets += 1
-        self.__set_timeout(self.timeout)
-        self.logger.info(f"Connecting {self.name}, ``{self.cfg.subappname}(client)'', to {self.cfg.url} ...")
-        self.__socket.connect(self.cfg.url)
+        self.__set_timeout(self.cfg.timeout)
+        self.logger.info(f"Connecting {self.name}, ``{self.subappname}(client)'', to {self.url} ...")
+        self.__socket.connect(self.url)
 
 
 
@@ -193,8 +190,9 @@ class Client(sl.Console):
         try:
             if flag_temporarytimeout:
                 self.__set_timeout(self.temporarytimeout)
-            await self.socket.send(bst)
-            b = await self.socket.recv()
+            socket = self.__get_socket()
+            await socket.send(bst)
+            b = await socket.recv()
         except zmq.Again as e:
             # Will re-create socket in case of timeout
             # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
@@ -210,7 +208,7 @@ class Client(sl.Console):
             raise sl.Retry(a107.str_exc(e))
         finally:
             if flag_temporarytimeout:
-                self.__set_timeout(self.timeout)
+                self.__set_timeout(self.cfg.timeout)
 
         ret = process_result(b)
         return ret
@@ -228,3 +226,6 @@ class Client(sl.Console):
                 raise
             self.__socket = None
 
+    def __get_socket(self):
+        self.__assure_socket()
+        return self.__socket
