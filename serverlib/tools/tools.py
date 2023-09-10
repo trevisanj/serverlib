@@ -23,7 +23,7 @@ def cli_client(client_or_cfg):
     client, cfg, _ = sl.get_client_and_cfg(client_or_cfg)
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=a107.SmartFormatter)
-    parser.add_argument("--host", type=str, required=False, default=cfg.defaulthost,
+    parser.add_argument("--host", type=str, required=False, default=cfg.host,
                         help="Host: setting this options allows to connect to a different host")
     parser.add_argument('-p', '--port', type=float, default=cfg.port, required=False, help="Port")
     args = parser.parse_args()

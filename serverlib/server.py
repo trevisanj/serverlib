@@ -44,6 +44,8 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
         return sl.hopo2url((self.cfg.host, self.cfg.port))
 
     def __init__(self, cfg, description=None, cmd=None, subservers=None):
+        assert issubclass(cfg, sl.ServerCfg)
+
         _api.WithCfg.__init__(self, cfg, description)
         _api.WithCommands.__init__(self, [sl.BasicServerCommands(), cmd])
         _api.WithClosers.__init__(self)

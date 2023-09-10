@@ -16,39 +16,44 @@ def is_loop(method):
 def is_app(cls):
     """Used to decorate app config class."""
 
-    if not issubclass(cls, sl.ServerCfg):
-        raise TypeError(f"Class `{cls.__name__}` must descend from `serverlib.ServerCfg`")
+    # if not issubclass(cls, sl.ServerCfg):
+    #     raise TypeError(f"Class `{cls.__name__}` must descend from `serverlib.ServerCfg`")
 
-    if not cls._appname:
-        cls.__appname = cls.__name__
+    if not hasattr(cls, "_appname") or not cls._appname:
+        cls._appname = cls.__name__
     return cls
 
 
-def is_subapp(cls):
+def is_subapp(appcfgcls):
     """Used to decorate subapp config class."""
 
-    if not issubclass(cls, sl.ServerCfg):
-        raise TypeError(f"Class `{cls.__name__}` must descend from `serverlib.ServerCfg`")
+    def copy_attrs(subappcfgcls):
+        if not issubclass(subappcfgcls, sl.ServerCfg):
+            raise TypeError(f"Class `{subappcfgcls.__name__}` must descend from `serverlib.ServerCfg`")
 
-    if not cls._subappname:
-        cls._subappname = cls.__name__
+        subappcfgcls._appname = appcfgcls._appname
 
-    return cls
+        if not subappcfgcls._subappname:
+            subappcfgcls._subappname = subappcfgcls.__name__
+
+        return subappcfgcls
+
+    return copy_attrs
 
 
-def is_client(servercls):
+def is_client(servercfgcls):
     """Decorator a cfg class which has client relation to servercls"""
 
-    def copy_attrs(cls):
-        if not issubclass(cls, sl.ClientCfg):
-            raise TypeError(f"Class `{cls.__name__}` must descend from `serverlib.ClientCfg`")
+    def copy_attrs(clientcfgcls):
+        if not issubclass(clientcfgcls, sl.ClientCfg):
+            raise TypeError(f"Class `{clientcfgcls.__name__}` must descend from `serverlib.ClientCfg`")
 
-        cls.port = servercls.port
-        cls._appname = servercls._appname
-        if hasattr(servercls, "_subappname"):
-            cls._subappname = servercls._subappname
+        clientcfgcls.port = servercfgcls.port
+        clientcfgcls._appname = servercfgcls._appname
+        if hasattr(servercfgcls, "_subappname"):
+            clientcfgcls._subappname = servercfgcls._subappname
 
-        return cls
+        return clientcfgcls
 
     return copy_attrs
 

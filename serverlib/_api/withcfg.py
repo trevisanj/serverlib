@@ -3,7 +3,7 @@ __all__ = ["WithCfg"]
 import os, a107, configobj, serverlib as sl, random, shelve
 import traceback
 from serverlib import config
-from . import _basicapi
+from . import _misc
 
 
 class WithCfg:
@@ -227,7 +227,7 @@ class WithCfg:
         self.flag_log_console = self.cfg.flag_log_console if self.cfg.flag_log_console is not None \
             else sl.config.logging.flag_console
         self.logginglevel = self.cfg.logginglevel if self.cfg.logginglevel is not None else sl.config.logging.level
-        self.__logger = _basicapi.get_new_logger(fn_log=self.logpath,
+        self.__logger = _misc.get_new_logger(fn_log=self.logpath,
                                             flag_log_file=self.flag_log_file,
                                             flag_log_console=self.flag_log_console,
                                             level=self.logginglevel,

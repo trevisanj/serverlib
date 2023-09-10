@@ -6,7 +6,7 @@ Attributes starting with "_" ("protected") are not written to configuration file
 All time values are in seconds.
 """
 
-__all__ = ["BaseCfg", "ConsoleCfg", "ServerCfg", "ClientCfg"]
+__all__ = ["BaseCfg", "ConsoleCfg", "ServerCfg", "ClientCfg", "AgentCfg"]
 
 import logging
 

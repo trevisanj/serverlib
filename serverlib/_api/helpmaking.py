@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import *
 from colored import fg, bg, attr
 import inspect, re, ansiwrap, math, shutil
-from . import _basicapi
+from . import _misc
 
 
 # ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
@@ -64,7 +64,7 @@ def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, 
     groups = []
     for commands in cmd.values():
         items = []
-        meta = _basicapi.get_metacommands(commands, flag_protected)
+        meta = _misc.get_metacommands(commands, flag_protected)
         for metacommand in meta:
             # re filter
             if refilter is not None and not re.search(refilter, metacommand.name): continue

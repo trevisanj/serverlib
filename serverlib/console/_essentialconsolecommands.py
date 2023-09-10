@@ -17,21 +17,19 @@ class EssentialConsoleCommands(sl.ConsoleCommands):
     @sl.is_command
     async def fav(self, what):
         """Toggles favourite command."""
-        fav = self.master.cfg.fav
-        what= str(what).lower()
+        fav = self.master.fav
+        what = str(what).lower()
         if what in fav:
             fav.remove(what)
         else:
             fav.append(what)
 
-        # todo test this
-        self.master.shelf["fav"] = fav
-        self.master.shelf.sync()
+        self.master.fav = fav
 
     @sl.is_command
     async def get_fav(self):
         """Return list of favourite commands."""
-        return self.master.cfg.fav
+        return self.master.fav
 
     # todo do I need this in the client side?
     # @sl.is_command

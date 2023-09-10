@@ -10,17 +10,27 @@ class DBServer(sl.Server):
         flag_shelf: whether of not the server will implement "shelve" capability (if yes, the server will provide
                     commands through a sacca.ServerCommands_Shelf)
     """
+
+    @property
+    def shelfpath(self):
+        """Returns the path to the shelf file."""
+        return self.filepath("shelf")
+
+    @property
+    def dbpath(self):
+        """Returns the path to the shelf file."""
+        return self.filepath(".sqlite")
+
     def __init__(self, *args, fileclass=None, flag_shelf=False, **kwargs):
         sl.Server.__init__(self, *args, **kwargs)
 
-        if not isinstance(self.cfg, sl.DBServerConfig):
-            raise TypeError(f"cfg must be a serverlib.DBServerConfig, not a {self.cfg.__class__.__name__}")
+        assert issubclass(self.cfg, sl.ServerCfg)
 
         self.dbfile = None
         if fileclass:
-            self.dbfile = self._append_closer(fileclass(self.cfg.dbpath, master=self))
+            self.dbfile = self._append_closer(fileclass(self.dbpath, master=self))
         if flag_shelf:
-            self.shelf = self._append_closer(shelve.open(self.cfg.shelfpath))
+            self.shelf = self._append_closer(shelve.open(self.shelfpath))
             self._attach_cmd(sl.ShelfServerCommands())
         if self.dbfile:
             self._attach_cmd(sl.DBServerCommands_FileSQLite())

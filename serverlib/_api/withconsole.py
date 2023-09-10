@@ -1,6 +1,8 @@
 __all__ = ["WithConsole"]
 
-import shelve, os, a107
+import os, a107
+from . import _misc
+
 
 class WithConsole:
     """Implements history and shelf for Console and Client classes."""
@@ -17,7 +19,7 @@ class WithConsole:
 
     @property
     def fav(self):
-        return self.shelf.get("fav")
+        return self.shelf.get("fav", [])
 
     @fav.setter
     def fav(self, value):
@@ -28,5 +30,6 @@ class WithConsole:
         dir_, _ = os.path.split(path_)
         if a107.ensure_path(dir_):
             self.logger.info(f"Created directory '{dir_}'")
-        self.shelf = self._append_closer(shelve.open(path_))
+
+        self.shelf = _misc.ConsoleShelf(self.shelfpath)
 

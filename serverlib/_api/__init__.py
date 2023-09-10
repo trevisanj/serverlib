@@ -11,4 +11,4 @@ from .withsleepers import *
 from .withcfg import *
 from .metacommand import *
 from .helpmaking import *
-from ._basicapi import *
+from ._misc import *

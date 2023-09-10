@@ -23,3 +23,8 @@ class Retry(Exception):
 
 class MismatchError(Exception):
     pass
+
+
+class ShelfTimeout(Exception):
+    """Timeout waiting for console shelf lock file """
+    pass

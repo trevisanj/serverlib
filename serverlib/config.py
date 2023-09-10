@@ -30,7 +30,7 @@ class config:
     # default data root
     defaultdataroot = "~/.serverlib"
 
-    # --- Default configuration for serverlib.Waiter instances
+    # -- Default configuration for serverlib.Waiter instances
     # initial waiting time (seconds)
     waiter_time_start: float = 0.5
     # maximum waiting time (seconds)
@@ -41,6 +41,12 @@ class config:
     # -- Other configuration
     # Description width in welcome message
     descriptionwidth = 100
+
+    # -- Exclusive access console shelf
+    # lock timeout
+    shelftimeout = .2
+    # shelf lock filename
+    shelflockfilename = "shelf.lock"
 
     class colors:
         okgreen = fg("green")

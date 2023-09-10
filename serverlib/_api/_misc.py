@@ -4,13 +4,13 @@ This file starts with "_" to distinguish from serverlib.basicapi.
 This is actually a miscellanea file.
 """
 
-__all__ = ["get_metacommands", "get_commands", "get_new_logger"]
+__all__ = ["get_metacommands", "get_commands", "get_new_logger", "ConsoleShelf"]
 
 
+import inspect, logging, a107, os, serverlib as sl, shelve, time, functools
 from .metacommand import MetaCommand
-import inspect, logging, a107, os
 from colored import fg, attr
-from ..config import config
+from .. import errors
 
 
 RESET = attr("reset")
@@ -59,3 +59,61 @@ def get_new_logger(level, flag_log_console, flag_log_file, fn_log, prefix, name)
     logger = logging.LoggerAdapter(logger, {"prefix": prefix})
 
     return logger
+
+
+
+
+
+def _locked(f):
+    """Decorator for all methods that need exclusive access to shelf"""
+
+    @functools.wraps(f)
+    def func(self, *args, **kwargs):
+        t = time.time()
+        while os.path.isfile(self._lockpath):
+            if time.time()-t >= sl.config.shelftimeout:
+                raise errors.ShelfTimeout("Console shelf access timeout")
+            time.sleep(.001)
+
+        try:
+            with open(self._lockpath, "w") as lockfile:
+                lockfile.write("Delete me in case of dead lock, no big deal")
+                # Opens shelf for use
+                self._shelf = shelve.open(self._shelfpath)
+
+                # Original method is called here
+                return f(self, *args, **kwargs)
+        finally:
+            if os.path.isfile(self._lockpath):
+                os.unlink(self._lockpath)
+            if self._shelf is not None:
+                self._shelf.close()
+                self._shelf = None
+
+    return func
+
+class ConsoleShelf:
+    """
+    Open-(read/write)-close layer over Python shelve with lock file
+    """
+
+    @_locked
+    def __getitem__(self, key):
+        return self._shelf[key]
+
+    @_locked
+    def get(self, key, default):
+        return self._shelf.get(key, default)
+
+    @_locked
+    def __setitem__(self, key, value):
+        self._shelf[key] = value
+
+    def __init__(self, shelfpath):
+        self._shelfdir = os.path.split(shelfpath)[0]
+        self._lockpath = os.path.join(self._shelfdir, sl.config.shelflockfilename)
+        self._shelfpath = shelfpath
+        self._shelf = None
+
+
+

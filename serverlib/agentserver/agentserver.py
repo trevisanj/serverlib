@@ -27,22 +27,20 @@ class AgentServer(sl.DBServer):
     #     return self.__sleepername
 
     def __init__(self, *args, taskcommandsgetter, taskclass=None, **kwargs):
-    # def __init__(self, *args, dbclientgetter, taskcommandsgetter, taskclass=None, **kwargs):
-
         from ._agentservercommands import AgentServerCommands
 
         super().__init__(*args, **kwargs)
 
-        if not isinstance(self.cfg, sl.AgentServerConfig):
-            raise TypeError(f"cfg must be a serverlib.AgentServerConfig, not {self.cfg.__class__.__name__}")
+        assert issubclass(self.cfg, sl.AgentCfg)
 
         if taskclass is None:
             taskclass = agenttask.AgentTask
-        # self.__dbclientgetter = dbclientgetter
+
         self.__taskcommandsgetter = taskcommandsgetter
 
         self.__taskclass = taskclass
-        self.__agents = {}  # {agentname: (self.__agentlo_op() made task), ...}
+        # {agentname: (loop task), ...}
+        self.__agents = {}
         self._attach_cmd(AgentServerCommands())
 
     # INTERFACE ZONE ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱

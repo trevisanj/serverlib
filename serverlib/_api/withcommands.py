@@ -1,7 +1,7 @@
 __all__ = ["WithCommands"]
 
 import serverlib as sl, asyncio, a107
-from . import _basicapi
+from . import _misc
 
 class WithCommands:
     """This class enters as an ancestor for the Client and Server class in a multiple-inheritance composition."""
@@ -30,7 +30,7 @@ class WithCommands:
         def process_one_cmd(one_cmd):
             one_cmd.master = self
             self.cmd[one_cmd.title] = one_cmd
-            for metacommand in _basicapi.get_metacommands(one_cmd, flag_protected=True):
+            for metacommand in _misc.get_metacommands(one_cmd, flag_protected=True):
                 name = metacommand.name
 
                 # WARNING: #gambiarra ahead
