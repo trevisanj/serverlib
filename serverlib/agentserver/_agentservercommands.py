@@ -1,13 +1,9 @@
 __all__ = ["AgentServerCommands"]
 
 import serverlib as sl, a107
-from . import agenttask
+from . import agentserver
 
 class AgentServerCommands(sl.DBServerCommands):
-    async def _on_initialize(self):
-        pass
-        # self.dbclient = self._append_closers(self.server.get_dbclient())
-
     @sl.is_command
     async def s_get_agentnames(self):
         return list(self.master.agents.keys())
@@ -18,9 +14,11 @@ class AgentServerCommands(sl.DBServerCommands):
         Configures task(s) to be executed as soon as possible.
 
         Args:
-            task: <task id>|"all"|"idle"|"suspended"
+            task: <task id>|"all"|"idle"|"suspended"|"inactive"
 
-        Tasks "in_progress" won't be touched
+        Notes:
+            1. tasks "in_progress" won't be touched in no situation
+            2. tasks "inactive" will be set to "idle" only if task=="inactive" explicitly
         """
 
         flag_single = False
@@ -32,14 +30,15 @@ class AgentServerCommands(sl.DBServerCommands):
                 pass
             elif task == sl.TaskState.in_progress:
                 raise ValueError(f"Tasks '{task} won't be touched")
-            elif task not in (sl.TaskState.idle, sl.TaskState.suspended):
+            elif task not in (sl.TaskState.idle, sl.TaskState.suspended, sl.TaskState.inactive):
                 raise ValueError(f"Invalid value for task: '{task}'")
 
         db = self.dbfile
 
         where = "where "+(f"id={task}" if isinstance(task, int)
-                          else f"state <> '{sl.TaskState.in_progress}'" if task == "all"
-                          else f"state = {task}")
+                          else f"state <> '{sl.TaskState.in_progress}' "
+                               f"and state <> '{sl.TaskState.inactive}'" if task == "all"
+                          else f"state = '{task}'")
 
         agentnames = set(db.get_singlecolumn(f"select agentname from task {where}"))
 
@@ -54,13 +53,6 @@ class AgentServerCommands(sl.DBServerCommands):
         except KeyError:
             # If any agent is not found, better to review agents
             self.server.review_agents()
-
-    @sl.is_command
-    async def s_run_idle_tasks_asap(self):
-        """Configures all idle tasks (state==serverlib.TaskState.idle) to be executed as soon as possible and tries to wake up everybody."""
-        self.dbfile.execute(f"update task set nexttime=0 where state=?", (sl.TaskState.idle, ))
-        self.dbfile.commit()
-        self.server.wake_up()
 
     @sl.is_command
     async def s_getd_tasks(self, where=""):
@@ -97,8 +89,8 @@ class AgentServerCommands(sl.DBServerCommands):
                             cols_values=cols_values,
                             columnnames=None)
 
-        task = agenttask.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (taskid,)))
-        task.calculate_nexttime()
+        task = self.master.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (taskid,)))
+        self.master.calculate_nexttime(task)
 
         db.execute("update task set nexttime=? where id=?", (task.nexttime, task.id))
         db.commit()

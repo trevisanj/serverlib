@@ -7,13 +7,13 @@ import a107
 
 taskpart_table = {
 "id": "integer primary key",
-"command": "text not null",
 "agentname": "text not null",
-"time": "text",
+"command": "text not null",
+"time_of_day": "text",
 "interval": "integer",
 "lasttime": "real",
 "nexttime": "real not null default 0",
-"state": "text not null default ''",
+"state": "text not null default 'idle'",
 "result": "text not null default ''",
 "lasterror": "text",
 }

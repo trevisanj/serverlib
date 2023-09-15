@@ -17,6 +17,7 @@ class TaskState:
     idle = "idle"
     in_progress = "in_progress"
     suspended = "suspended"
+    inactive = "inactive"
 
 class TaskResult:
     """Possible values for task.result"""

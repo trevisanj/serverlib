@@ -15,9 +15,10 @@ class BaseCfg:
     """Base class for all "cfg" objects"""
     _appname = None
     _subappname = None
-    logginglevel = logging.INFO
-    flag_log_console = True
-    flag_log_file = True
+    # logging configuration is set to None so that WithCfg.__create_logger() will take defaults
+    logginglevel = None
+    flag_log_console = None
+    flag_log_file = None
 
 
 class ConsoleCfg(BaseCfg):
@@ -35,13 +36,19 @@ class ClientCfg(BaseCfg):
     host = "127.0.0.1"
     # time waiting to send to and receive from server (in practice the total wait time is 2*timeout)
     timeout = 30
+    # time to wait before retrying a retriable command (i.e. when serverlib.Retry is raised)
+    waittime_retry_command = .1
+    # maximum number of retries for a retriable command
+    maxtries = 3
 
 
 class AgentCfg(ServerCfg):
     # interval to review all tasks and spawn/kill agents
     agentloopinterval = 15
     # time to wait before retrying a failed task
-    retry_waittime = 1
+    waittime_retry_task = 1.
+    # time to wait if agent found no tasks to execute
+    waittime_no_tasks = 10.
 
 
 

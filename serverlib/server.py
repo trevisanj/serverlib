@@ -63,10 +63,21 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
     # └─┘ └┘ └─┘┴└─┴└─┴─┴┘└─┘  ┴ ┴└─┘
 
     async def _on_initialize(self):
-        pass
+        """To be inherited outside serverlib."""
+    
+    async def _do_initialize(self):
+        """Do be inherited in subclasses which are part of serverlib."""
 
     async def _on_getd_all(self, statedict):
-        """Override this to add elements to statedict in response to server command "s_getd_all"."""
+        """Inherit this to add elements to statedict in response to server command "s_getd_all"."""
+
+    async def _do_getd_all(self, statedict):
+        """
+        Similar to _on_getd_all() but is inherited by serverlib components.
+
+        Whereas, _on_getd_all() is intended to be inherited in libraries outside serverlib.
+        """
+
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
@@ -299,7 +310,7 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                 raise
 
             await self._initialize_cmd()
-            # todo not yet, if ever ... await self.__start_subservers()
+            await self._do_initialize()
             await self._on_initialize()
             # MAIN LOOP ...
             self.__state = ServerState.LOOP
@@ -312,18 +323,10 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                             await asyncio.sleep(self.sleepinterval)
             except asyncio.CancelledError:
                 raise
-            # except KeyboardInterrupt:
-            #     return "⌨ K ⌨ E ⌨ Y ⌨ B ⌨ O ⌨ A ⌨ R ⌨ D ⌨"
-            # except:
-            #     self.logger.exception(f"Server '{self.subappname}' ☠C☠R☠A☠S☠H☠E☠D☠")
-            #     raise
             finally:
                 self.__state = ServerState.STOPPED
                 self.logger.debug(f"{self.__class__.__name__}.__mainloop() finally'")
-                self.wake_up()
 
-                # Thought I might wait a bit before cancelling all loops (to let them do their shit; might reduce probability of errors)
-                await asyncio.sleep(0.1)
                 self.stop()
                 await self.close()
 

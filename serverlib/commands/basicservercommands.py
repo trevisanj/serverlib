@@ -83,7 +83,6 @@ class BasicServerCommands(ServerCommands):
     @is_command
     async def s_getd_loops(self):
         """Reports server loops as a list of dicts."""
-        print("COCOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
         ret = [loopdata.to_dict() for loopdata in self.master.loops]
         return ret
 

@@ -1,5 +1,6 @@
 __all__ = ["config"]
 
+import logging
 import logging as lggng
 
 from colored import fg, bg, attr
@@ -32,9 +33,9 @@ class config:
 
     # -- Default configuration for serverlib.Waiter instances
     # initial waiting time (seconds)
-    waiter_time_start: float = 0.5
+    waiter_starttime: float = 0.5
     # maximum waiting time (seconds)
-    waiter_time_max: int = 30
+    waiter_maxtime: int = 30
     # maximum number of attempts
     waiter_maxtries: int = 10
 
@@ -75,3 +76,7 @@ class config:
         # Don't remove #color and #reset
         consolefmt = f'#color[%(prefix)s%(name)s %(levelname)s]#reset %(message)s'
         filefmt = '[%(prefix)s%(name)s %(levelname)s] %(message)s'
+
+        level = logging.INFO
+        flag_console = True
+        flag_file = True

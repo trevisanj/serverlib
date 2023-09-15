@@ -9,6 +9,7 @@ from .dbservercommands import *
 class DBServerCommands_FileSQLite(DBServerCommands):
     """"Low-level" access to FileSQLite object."""
 
+    @is_command
     async def s_commit(self):
         """Commits the current transaction."""
         self.dbfile.commit()
@@ -27,7 +28,8 @@ class DBServerCommands_FileSQLite(DBServerCommands):
             list of rows
         """
         cursor = self.dbfile.execute(statement, bindings)
-        if flag_commit: self.dbfile.commit()
+        if flag_commit:
+            self.dbfile.commit()
         return _format_cursor(cursor, rowformat)
 
     @is_command
@@ -78,6 +80,7 @@ class DBServerCommands_FileSQLite(DBServerCommands):
         """Creates database if it does not exist or if forced overwriting. **Careful**"""
         flag_overwrite = a107.to_bool(flag_overwrite)
         self.dbfile.create_database(flag_overwrite=flag_overwrite)
+
 
 
 def _format_cursor(cursor, rowformat):

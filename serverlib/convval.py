@@ -15,7 +15,7 @@ import dateutil
 
 def _convert_whenthis(whenthis):
     if whenthis is None: return None
-    return a107.human2ts(whenthis)
+    return a107.to_ts_utc(whenthis)
 
 
 # Update converters and validators at will!

@@ -7,6 +7,7 @@ from serverlib.config import *
 from colored import fg, bg, attr
 from contextlib import redirect_stdout
 import serverlib as sl
+import rich
 
 
 def print_result(ret, logger, flag_colors=True):
@@ -37,32 +38,33 @@ def print_result(ret, logger, flag_colors=True):
                 handle_default(arg)
 
         def handle_dict(arg):
-            if len(arg) > 0:
-                # 20230827 Limiting recursive resolution to first level
-                if level == 0 and any(isinstance(x, (tuple, list, dict)) for x in arg.values()):
-                    # complex values: prints keys as titles and processes values
-                    for i, (k, v) in enumerate(arg.items()):
-                        if i > 0:
-                            print()
-                        print_header(k)
-                        handle_all(v, level+1)
-                else:
-                    first = next(iter(arg.values()))
-                    if isinstance(first, str) and "\n" in first:
-                        # dict of strings with more than one line: prints keys as titles and prints strings
-                        for i, (k, v) in enumerate(arg.items()):
-                            if i > 0:
-                                print()
-                            print_header(k)
-                            print(v)
-                    else:
-                        # "simple dict": 2-column (key, value) table
-                        rows = [(k, v) for k, v in arg.items()]
-                        header = ["key", "value"]
-                        print_tabulated(_powertabulate(rows, header, logger=logger))
-
-            else:
-                handle_default(arg)
+            rich.print(arg)
+            # if len(arg) > 0:
+            #     # 20230827 Limiting recursive resolution to first level
+            #     if level == 0 and any(isinstance(x, (tuple, list, dict)) for x in arg.values()):
+            #         # complex values: prints keys as titles and processes values
+            #         for i, (k, v) in enumerate(arg.items()):
+            #             if i > 0:
+            #                 print()
+            #             print_header(k)
+            #             handle_all(v, level+1)
+            #     else:
+            #         first = next(iter(arg.values()))
+            #         if isinstance(first, str) and "\n" in first:
+            #             # dict of strings with more than one line: prints keys as titles and prints strings
+            #             for i, (k, v) in enumerate(arg.items()):
+            #                 if i > 0:
+            #                     print()
+            #                 print_header(k)
+            #                 print(v)
+            #         else:
+            #             # "simple dict": 2-column (key, value) table
+            #             rows = [(k, v) for k, v in arg.items()]
+            #             header = ["key", "value"]
+            #             print_tabulated(_powertabulate(rows, header, logger=logger))
+            #
+            # else:
+            #     handle_default(arg)
 
         def handle_helpdata(arg):
             text = helpmaking.make_text(arg)
@@ -120,7 +122,7 @@ def result2str(ret, logger, flag_colors=True):
 
 
 _powertabulatemap = [
-    {"fieldnames": ("whenthis", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
+    {"fieldnames": ("whenthis", "startts", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
      "converter": lambda x: a107.dt2str(a107.to_datetime(x)), },
     # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
     {"fieldnames": ("period",),
@@ -129,12 +131,15 @@ _powertabulatemap = [
      "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
     {"fieldnames": ("narration",),
      "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
+    {"fieldnames": ("flag",),
+     "converter": lambda x: str(x)}
 ]
 
 
 def _powertabulate(rows, header, logger, *args, **kwargs):
 
-    mymap = [[[i for i, h in enumerate(header) if h in row["fieldnames"]], row["converter"]] for row in
+    mymap = [[[i for i, h in enumerate(header)
+               if any(h.startswith(prefix) for prefix in row["fieldnames"])], row["converter"]] for row in
              _powertabulatemap]
     mymap = [row for row in mymap if row[0]]
     if mymap:

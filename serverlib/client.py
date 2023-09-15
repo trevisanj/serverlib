@@ -1,4 +1,4 @@
-import zmq, zmq.asyncio, pickle, a107, serverlib as sl
+import zmq, zmq.asyncio, pickle, a107, serverlib as sl, asyncio
 from . import _api
 
 __all__ = ["Client"]
@@ -176,7 +176,19 @@ class Client(sl.Console):
     async def __execute_server(self):
         data = self._statementdata
         bst = data.commandname.encode()+b" "+pickle.dumps([data.args, data.kwargs])
-        return await self.__execute_bytes(bst)
+        i = 0
+        while True:
+            try:
+                return await self.__execute_bytes(bst)
+            except sl.Retry as e:
+                i += 1
+                if i == self.cfg.maxtries:
+                    raise
+
+                waittime = e.waittime if e.waittime is not None else self.cfg.waittime_retry_command
+                self.logger.error(f"Error executing statement '{data.commandname}': {a107.str_exc(e)} "
+                                  f"(attempt {i}/{self.cfg.maxtries}) (will retry in {waittime} seconds)")
+                await asyncio.sleep(waittime)
 
     async def __execute_bytes(self, bst):
         def process_result(b):
@@ -194,13 +206,6 @@ class Client(sl.Console):
             await socket.send(bst)
             b = await socket.recv()
         except zmq.Again as e:
-            # Will re-create socket in case of timeout
-            # https://stackoverflow.com/questions/41009900/python-zmq-operation-cannot-be-accomplished-in-current-state
-
-            # 20210912 I removed this socket deletion in case of zmq.Again error, as this error is a 0MQ statement to
-            # retry, not to delete the socket
-            # self.__del_socket()
-
             raise sl.Retry(a107.str_exc(e))
         except zmq.ZMQError as e:
             # 20210912 This makes more sense, i.e., deleting the socket only after ruling out less serious situations

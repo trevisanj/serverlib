@@ -35,7 +35,7 @@ class DBServer(sl.Server):
         if self.dbfile:
             self._attach_cmd(sl.DBServerCommands_FileSQLite())
 
-    async def _on_initialize(self):
+    async def _do_initialize(self):
         if self.dbfile:
             self.dbfile.create_database()
 
