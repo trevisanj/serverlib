@@ -48,7 +48,7 @@ class Intelligence(_api.WithClosers):
         self.__cfg = cfg
         self.__flag_initialized = False
 
-        # TODO what is wrong with having a name argument?????????????????????????????????????
+        # TODO this is stupid but I should fix this only when I do need name for intelligence
         self.name = a107.random_name()
         # print(f"AND A NEW INTELLIGENCE IS BORN: {self.name} ({self.__class__.__name__})--------------------------------------")
 

@@ -24,7 +24,7 @@ class Waiter(sl.Intelligence):
     def flag_persevere(self):
         return not self.flag_give_up
 
-    def __init__(self, *args, description=None, sleepername=None, starttime=None, maxtries=None, time_max=None,
+    def __init__(self, *args, description="Waiter", sleepername=None, starttime=None, maxtries=None, time_max=None,
                  flag_quiet=False, logger=None, **kwargs):
         super().__init__(*args, **kwargs)
         # Default message if none is specified at wait() or wait_or_raise()

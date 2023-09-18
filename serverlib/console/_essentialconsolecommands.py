@@ -30,9 +30,3 @@ class EssentialConsoleCommands(sl.ConsoleCommands):
     async def get_fav(self):
         """Return list of favourite commands."""
         return self.master.fav
-
-    # todo do I need this in the client side?
-    # @sl.is_command
-    # async def getd_lowstate(self):
-    #     return sl.lowstate.__dict__
-

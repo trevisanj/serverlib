@@ -1,5 +1,3 @@
-# TODO this could be a package in itself, with option to configure the "power tabulate map"
-
 __all__ = ["print_result", "result2str"]
 
 import tabulate, a107, textwrap, re, pl3, io

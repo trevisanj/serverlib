@@ -17,9 +17,13 @@ class WithSleepers:
     def wake_up(self, sleepername=None):
         """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
         if sleepername is not None:
-            self.__sleepers[sleepername].flag_wake_up = True
+            try:
+                self.__sleepers[sleepername].flag_wake_up = True
+            except KeyError:
+                self.logger.debug(f"Sleeper '{sleepername}' not found")
         else:
-            for sleeper in self.__sleepers.values(): sleeper.flag_wake_up = True
+            for sleeper in self.__sleepers.values():
+                sleeper.flag_wake_up = True
 
     async def wait_a_bit(self):
         """Unified way to wait for a bit, usually before retrying something that goes wront."""
@@ -52,12 +56,12 @@ class WithSleepers:
         self.__sleepers[sleeper.name] = sleeper
         slept = 0
         try:
-            my_debug("💤💤💤")
+            # my_debug("💤💤💤")
             while slept < waittime and not sleeper.flag_wake_up:
                 await asyncio.sleep(interval)
                 slept += interval
         finally:
-            my_debug("⏰ Wake up!")
+            # my_debug("⏰ Wake up!")
             try:
                 del self.__sleepers[sleeper.name]
             except KeyError:

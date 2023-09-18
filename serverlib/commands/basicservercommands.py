@@ -110,5 +110,6 @@ class BasicServerCommands(ServerCommands):
                "loops": await self.s_getd_loops(),
                "sleepers": await self.s_getd_sleepers(),
                "cmd": cmd}
+        await self.master._do_getd_all(ret)
         await self.master._on_getd_all(ret)
         return ret

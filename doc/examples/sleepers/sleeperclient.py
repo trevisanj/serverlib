@@ -4,7 +4,7 @@ __doc__ = "Sleeper Client"
 
 
 if __name__ == "__main__":
-    cfg = sl.ClientConfig(port=6667,
+    cfg = sl.ClientCfg(port=6667,
                           appname="sleeper",
                           flag_log_file=True,
                           flag_log_console=False,

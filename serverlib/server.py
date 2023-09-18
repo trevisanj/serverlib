@@ -25,7 +25,7 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
     """Server class.
 
     Args:
-        cfg: ServerConfig
+        cfg: ServerCfg
         cmd: instance or list of Servercommands
     """
 
@@ -78,6 +78,13 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
         Whereas, _on_getd_all() is intended to be inherited in libraries outside serverlib.
         """
 
+        statedict["server"] = {x: getattr(self, x)
+                               for x in ["appname", "subappname", "datadir", "configpath", "logpath", ]}
+
+        if self.__subservers:
+            statedict["subservers"] = [{"subappname": scpair.server.subappname,
+                                        "port": scpair.server.cfg.port,
+                                        "state": scpair.server.state.name} for scpair in self.__subservers]
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # ┬ ┬┌─┐┌─┐  ┌┬┐┌─┐
@@ -152,9 +159,6 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                     while self.state != ServerState.LOOP:
                         await asyncio.sleep(0.01)
                 return await awaitable
-            # todo still don't know what to do with keyboard interruption (if ever happens, because it seems that asyncio throws a CancelledError)
-            #  except KeyboardInterrupt:
-            #     loopdata.flag_interrupted = True
             except asyncio.CancelledError:
                 raise
             except BaseException as e:
@@ -220,11 +224,6 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                     ret = method(*data[0], **data[1])
             except BaseException as e:
                 self.logger.exception(f"Error executing '{method.__name__}'")
-                # 2023 todo cleanup I think this is too much innovation when Python has a logging framework
-                # if sl.config.flag_log_traceback:
-                #     a107.log_exception_as_info(self.logger, e, f"Error executing '{method.__name__}'")
-                # else:
-                #     self.logger.info(f"Error executing '{method.__name__}': {a107.str_exc(e)}")
                 ret = e
             return ret
 
@@ -270,12 +269,7 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                     msg = pickle.dumps(result)
                 except BaseException as e:
                     self.logger.exception("Error pickling result")
-                    # # 2023 todo cleanup I think this is too much innovation when Python has a logging framework
-                    # if sl.config.flag_log_traceback:
-                    #     a107.log_exception_as_info(self.logger, e, f"Error pickling result")
-                    # else:
-                    #     self.logger.info(f"Error pickling result: {a107.str_exc(e)}")
-
+                    # Sends exception to client instead
                     msg = pickle.dumps(e)
                     await sck_rep.send(msg)
                 else:
@@ -417,9 +411,6 @@ class _LoopData:
     marked: bool = False
     # method result after awaited on
     result: Any = None
-
-    # todo cleanup when I am sure this is no longer an idea to be implemented # whether task was interrupted with KeyboardInterrupt
-    #  flag_interrupted = False
 
     def to_dict(self):
         return {"kind": self.kind,

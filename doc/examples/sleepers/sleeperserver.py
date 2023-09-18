@@ -70,7 +70,7 @@ class SleeperCommands(sl.ServerCommands):
 if __name__ == "__main__":
     sl.lowstate.sleeperid = 0
 
-    cfg = sl.ServerConfig(port=6667,
+    cfg = sl.ServerCfg(port=6667,
                           flag_log_console=True,
                           appname="sleeper",
                           description=__doc__)

@@ -4,7 +4,7 @@ __doc__ = "Achievements Client"
 
 
 if __name__ == "__main__":
-    cfg = sl.ClientConfig(port=6668,
+    cfg = sl.ClientCfg(port=6668,
                           appname="achievements",
                           datadir=".",
                           flag_log_file=True,

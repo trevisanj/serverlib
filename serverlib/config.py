@@ -7,8 +7,8 @@ from colored import fg, bg, attr
 import tabulate
 # from dataclasses import dataclass
 
-# todo improve the explanation below (wtf does "Allows me to create a nicer "Summarize2()" table" mean?)
-tabulate.PRESERVE_WHITESPACE = True  # Allows me to create a nicer "Summarize2()" table
+# keeps tabulate from trimming strings
+tabulate.PRESERVE_WHITESPACE = True
 
 
 RESET = attr("reset")

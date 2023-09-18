@@ -2,7 +2,7 @@
 Basic conversion routines
 """
 
-__all__ = ["hopo2url", "cfg2str", "cfg2dict"]
+__all__ = ["hopo2url", "cfg2dict"]
 
 
 def hopo2url(hopo, fallbackhost="127.0.0.1"):
@@ -28,28 +28,6 @@ def hopo2url(hopo, fallbackhost="127.0.0.1"):
     return h if port is None else f"{h}:{port}"
 
 
-# todo c'mon, I could call cfg2dict first, was I stoned when I did this???
-def cfg2str(cfg, flag_clean=True):
-    """Converts config object to string.
-
-    Args:
-        cfg:
-        flag_clean: if True, skips attributes that do not render nicely, such as "<object object at 0x7f93a4aa6160>"
-    """
-    l = []
-    for attrname in dir(cfg):
-        if not attrname.startswith("_"):
-            attr = getattr(cfg, attrname)
-            s = repr(attr)
-            if flag_clean and "object at" in s:
-                continue
-            if len(s) > 150:
-                s = s[:75]+" ... "+s[-75:]
-
-            l.append(f"{attrname}={s}")
-    return "\n".join(l)
-
-
 def cfg2dict(cfg, flag_clean=True):
     """Converts config object to dict.
 
@@ -65,5 +43,4 @@ def cfg2dict(cfg, flag_clean=True):
             if flag_clean and s[0] == "<":
                 continue
             ret[attrname] = attr
-    print("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC", ret)
     return ret

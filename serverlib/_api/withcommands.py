@@ -35,8 +35,9 @@ class WithCommands:
 
                 # WARNING: #gambiarra ahead
                 if name in self.metacommands:
-                    # TODO let's see, maybe we let commands override each other without warning
-                    self.logger.warming(f"Repeated command: '{name}'")
+                    tmp = self.metacommands[name]
+                    raise RuntimeError(f"Attaching {one_cmd.__class__.__name__}.{name}() to {self.__class__.__name__}: "
+                                       f"class {tmp.method.__self__.__class__.__name__}.{name}() came first")
 
                 self.metacommands[name] = metacommand
 

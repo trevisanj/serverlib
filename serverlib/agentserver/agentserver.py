@@ -236,7 +236,7 @@ class AgentServer(sl.DBServer):
 
         # === BEGIN agent life
 
-        agentlogger = self.get_new_logger(f"{self.logger.name}.agent.{agentname}")
+        agentlogger = self.get_new_sublogger(f"agent.{agentname}")
 
         try:
             # dbclient = self.get_dbclient()
@@ -274,8 +274,7 @@ class AgentServer(sl.DBServer):
 
             finally:
                 agentlogger.debug(f"on its 'finally:'")
-                await sl.retry_on_cancelled(taskcommands.close(), logger=agentlogger)
-                # await sl.retry_on_cancelled(dbclient.close(), logger=agentlogger)
+                await taskcommands.close()
                 agentlogger.debug(f"succeeded on its 'finally:'")
         except asyncio.CancelledError:
             # I know one could say I should raise this, not no, this is agent logic: agent loop does not raise

@@ -79,7 +79,8 @@ class Client(sl.Console):
     async def _initialize_client(self):
         self.__assure_socket()
         server_subappname = await self._get_server_subappname()
-        # todo I am still unsure if this comparison is really necessary. Maybe for the sake of avoiding mistakes
+
+        # client and server subappname must match
         if self.subappname != server_subappname:
             raise sl.MismatchError(f'Client x Server subappname mismatch '
                                    f'(\'{self.subappname}\' x \'{server_subappname}\')')

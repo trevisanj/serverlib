@@ -101,11 +101,14 @@ class WithCfg:
         self.__logger = None
         self.__autodir = None
 
+    def get_new_sublogger(self, namesuffix):
+        """Creates new logger with compounded name"""
+        return self.get_new_logger(f"{self.logger.name}.{namesuffix}")
+
     def get_new_logger(self, name):
         """Creates new logger using all the same configuration as self.logger, except name"""
 
-        flag_log_file = self.cfg.flag_log_file if self.cfg.flag_log_file is not None \
-            else sl.config.logging.flag_file
+        flag_log_file = self.__get_flag_log_file()
         flag_log_console = self.cfg.flag_log_console if self.cfg.flag_log_console is not None \
             else sl.config.logging.flag_console
         logginglevel = self.cfg.logginglevel if self.cfg.logginglevel is not None else sl.config.logging.level
@@ -233,11 +236,10 @@ class WithCfg:
         ret = os.path.join(dataroot, self.appname)
         return ret
 
-
     def __create_logger(self):
         """Creates self.__logger. Must be the first logger to be created"""
         flag_created_dir = False
-        if self.cfg.flag_log_file:
+        if self.__get_flag_log_file():
             dir_ = os.path.split(self.logpath)[0]
             if dir_:
                 flag_created_dir = a107.ensure_path(dir_)
@@ -245,4 +247,6 @@ class WithCfg:
         if flag_created_dir:
             self.__logger.info(f"Created directory '{dir_}'")
 
-
+    def __get_flag_log_file(self):
+        return self.cfg.flag_log_file if self.cfg.flag_log_file is not None \
+            else sl.config.logging.flag_file

@@ -4,7 +4,7 @@ Routines not used by serverlib itself (made for external use!)
 If you start using anything here within serverlib, move to basicapi.py instead
 """
 
-__all__ = ["cli_client", "cli_server", "start_if_not", "stop_if", "cli_start_stop", "cli_start_stop1", "make_configs"]
+__all__ = ["cli_client", "cli_server", "start_if_not", "stop_if", "cli_start_stop", "cli_start_stop1",]
 
 import argparse, serverlib as sl, asyncio, a107, subprocess, sys
 
@@ -17,7 +17,7 @@ def cli_client(client_or_cfg):
         client_or_cfg: either:
            A) serverlib.Client instance
            B) serverlib.Client subclass
-           C) or serverlib.ClientConfig instance
+           C) or serverlib.ClientCfg instance
     """
 
     client, cfg, _ = sl.get_client_and_cfg(client_or_cfg)
@@ -41,7 +41,7 @@ def cli_server(server_or_cfg):
         server_or_cfg: either:
            A) serverlib.Server instance
            B) serverlib.Server subclass
-           C) or serverlib.ServerConfig instance
+           C) or serverlib.ServerCfg instance
     """
 
     server, cfg, _ = sl.get_server_and_cfg(server_or_cfg)
@@ -201,20 +201,3 @@ Descriptions of commands:
     finally:
         if flag_instantiated:
             await client.close()
-
-
-def make_configs(appname, subappname=None, port=None, servercls=None, clientcls=None):
-    """Automatic making server and client configuration objects"""
-
-    if servercls is None:
-        servercls = sl.ServerConfig
-    if clientcls is None:
-        clientcls = sl.ClientConfig
-
-    servercfg = servercls(appname=appname,
-                             subappname=subappname,
-                             port=port)
-    clientcfg = clientcls(appname=appname,
-                          subappname=subappname,
-                          port=port)
-    return servercfg, clientcfg

@@ -48,18 +48,18 @@ def get_client_and_cfg(client_or_cfg):
     if isinstance(client_or_cfg, sl.Client):
         client = client_or_cfg
         cfg = client.cfg
-    elif isinstance(client_or_cfg, sl.ClientConfig):
+    elif isinstance(client_or_cfg, sl.ClientCfg):
         cfg = client_or_cfg
         client = sl.Client(cfg=cfg)
         flag_instantiated = True
     elif issubclass(client_or_cfg, sl.Client):
         if client_or_cfg == sl.Client:
-            raise TypeError(f"I need a ClientConfig to instantialize Client")
+            raise TypeError(f"I need a ClientCfg to instantialize Client")
         client = client_or_cfg()
         cfg = client.cfg
         flag_instantiated = True
     else:
-        raise TypeError(f"client_or_config must be a Client/ClientConfig instance or a Client subclass, "
+        raise TypeError(f"client_or_config must be a Client/ClientCfg instance or a Client subclass, "
                         f"not {client_or_cfg.__class__.__name__}")
     return client, cfg, flag_instantiated
 
@@ -78,17 +78,17 @@ def get_server_and_cfg(server_or_cfg):
     if isinstance(server_or_cfg, sl.Server):
         server = server_or_cfg
         cfg = server.cfg
-    elif isinstance(server_or_cfg, sl.ServerConfig):
+    elif isinstance(server_or_cfg, sl.ServerCfg):
         cfg = server_or_cfg
         server = sl.Server(cfg=cfg)
     elif issubclass(server_or_cfg, sl.Server):
         if server_or_cfg == sl.Server:
-            raise TypeError(f"I need a ServerConfig to instantialize Server")
+            raise TypeError(f"I need a ServerCfg to instantialize Server")
         server = server_or_cfg()
         cfg = server.cfg
         flag_instantiated = True
     else:
-        raise TypeError(f"server_or_config must be a Server/ServerConfig instance or a Server subclass, "
+        raise TypeError(f"server_or_config must be a Server/ServerCfg instance or a Server subclass, "
                         f"not {server_or_cfg.__class__.__name__}")
     return server, cfg, flag_instantiated
 

@@ -67,7 +67,8 @@ async def subscriber(hopos, topics, logger=None):
     >>>     async for msg in subscriber(("localhost", 9999), ["beep", "print"]):
     >>>         print(f"Received '{msg}')
     """
-    if logger is None: logger = a107.get_python_logger()
+    if logger is None:
+        logger = a107.get_python_logger()
     logger.debug(format_wow("subscriber() is alive"))
     if isinstance(hopos, (int, str)):
         hopos = [hopos]
@@ -85,7 +86,15 @@ async def subscriber(hopos, topics, logger=None):
         while True:
             logger.debug(format_wow("Waiting for message..."))
             msg = await socket.recv()
-            logger.debug(format_wow(f":) Received '{msg}'"))
+
+            # debug
+            try:
+                i0 = msg.index(b" ")
+                msg_ = msg[:i0].decode()
+            except ValueError:
+                msg_ = msg.decode()
+            logger.debug(format_wow(f":) Received command '{msg_}'"))
+
             yield msg
     finally:
         socket.close()
