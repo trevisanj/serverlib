@@ -14,7 +14,7 @@ taskpart_table = {
 "lasttime": "real",
 "nexttime": "real not null default 0",
 "state": "text not null default 'idle'",
-"result": "text not null default ''",
+"result": "text",
 "lasterror": "text",
 }
 

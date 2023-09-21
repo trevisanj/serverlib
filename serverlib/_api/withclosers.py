@@ -11,7 +11,8 @@ class WithClosers:
         self.__flag_called_close = False
     
     def _append_closers(self, *args):
-        """Appends "closeable" objects for automatic and recursive close. Returns object or list of objects passed.
+        """
+        Appends "closeable" objects for automatic and recursive close. Returns object or list of objects passed.
 
         From the point of view of this class, _on_close() and _do_close() are indistinct. Both are called and in no
         paticular order.
@@ -23,18 +24,25 @@ class WithClosers:
 
         In this example, a list is returned:
         >>> self.seriesdbclient, self.twitterdbclient = self._append_closers(sacca.SeriesClient(),
-        >>>                                                                 sacca.TwitterDBClient())
+        >>>                                                                  sacca.TwitterDBClient())
         """
         ret = []
         for closers in args:
-            if not isinstance(closers, (list, tuple)): closers = [closers]
+            if not isinstance(closers, (list, tuple)): 
+                closers = [closers]
             for closer in closers:
-                self.__closers.append(closer)
+                self.__append_closer(closer)
                 ret.append(closer)
         assert len(ret) > 0, f"Nothing was passed to {self.__class__.__name__}._append_closers()"
 
         if len(ret) == 1: return ret[0]
         return ret
+
+    def __append_closer(self, closer):
+        assert closer not in self.__closers, (f"{closer.__class__.__name__} '{closer.name}' is already in"
+            f"{self.__class__.__name__} '{self.name}'s closers")
+
+        self.__closers.append(closer)
 
     async def _aappend_closers(self, *args, flag_initialize=True):
         """Async version of _append_closers() with automatic initialization option."""
@@ -42,14 +50,15 @@ class WithClosers:
         for closers in args:
             if not isinstance(closers, (list, tuple)): closers = [closers]
             for closer in closers:
-                self.__closers.append(closer)
+                self.__append_closer(closer)
                 ret.append(closer)
         assert len(ret) > 0, f"Nothing was passed to {self.__class__.__name__}._append_closers()"
 
         if flag_initialize:
             await asyncio.gather(*[closer.initialize() for closer in ret if hasattr(closer, "initialize")])
 
-        if len(ret) == 1: return ret[0]
+        if len(ret) == 1:
+            return ret[0]
         return ret
 
     _append_closer = _append_closers
@@ -57,6 +66,7 @@ class WithClosers:
     _aappend_closer = _aappend_closers
     _append_closers.__name__ = "_append_closers"
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # INHERITABLES
 
     async def _on_close(self):
@@ -65,14 +75,15 @@ class WithClosers:
     async def _do_close(self):
         """This method is called after _on_close(). It inherited by Client. Do not inherit further outside serverlib."""
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # INTERFACE
 
     async def close(self):
         """Calls self._on_close() and self._do_close() first; then calls closers' close()."""
 
-        assert not self.__flag_called_close, f"{self.__class__.__name__}.close() has already been called"
+        assert not self.__flag_called_close, f"{self.__class__.__name__}.close() has already been called (my name is '{self.name}')"
 
-        self.logger.debug(f"Closing {self.__class__.__name__}")
+        self.logger.debug(f"{self.__class__.__name__} '{self.name}' is closing itself")
 
         await self._on_close()
         await self._do_close()
@@ -81,7 +92,8 @@ class WithClosers:
         awaitables = []
         for closer in self.__closers:
             flag_has = True
-            try: method = closer.close
+            try:
+                method = closer.close
             except AttributeError:
                 try:
                     method = closer.Close
@@ -90,6 +102,9 @@ class WithClosers:
             if not flag_has:
                 raise AttributeError(f"Class {closer.__class__.__name__} does not have close()/Close() method")
 
+            # debug
+            name = f"'closer.name'" if hasattr(closer, "name") else id(closer)
+            self.logger.debug(f"{self.__class__.__name__} '{self.name}' is closing {closer.__class__.__name__} {name}")
             if not inspect.iscoroutinefunction(method):
                 method()
             else:
@@ -98,3 +113,4 @@ class WithClosers:
         await asyncio.gather(*awaitables)
         self.__flag_called_close = True
 
+        self.logger.debug(f"{self.__class__.__name__} '{self.name}' finished closing itself")

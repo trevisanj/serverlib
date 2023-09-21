@@ -7,7 +7,7 @@ Based on ancient sacca::convert_and_validate_args.py
 
 """
 __all__ = ["convert_values", "update_row", "validate_values", "convert_and_validate",
-           "converters", "validators", "insert_row"]
+           "converters", "validators", "insert_row", "normalize_time_of_day", "validate_time_of_day"]
 
 import inspect, a107
 import dateutil
@@ -26,7 +26,7 @@ def _convert_whenthis(whenthis):
 #
 # callable(value) --> new value
 converters = {
-    "time": lambda x: _normalize_time(x),
+    "time_of_day": lambda x: normalize_time_of_day(x),
 }
 
 # Validation
@@ -39,7 +39,7 @@ converters = {
 #                            Advantage of (B.B) is that errors can be collected and raised at once
 #                            with single ValueError
 validators = {
-    "time": lambda x: _validate_time(x),
+    "time_of_day": lambda x: validate_time_of_day(x),
 }
 
 
@@ -126,7 +126,6 @@ async def update_row(db, tablename, id_, cols_values, columnnames=None):
     equals = ", ".join([f"{columnname}=?" for columnname in cols_values])
     sqlito = f"update {tablename} set {equals} where id=?"
     db.execute(sqlito, bindings)
-    db.commit()
 
 
 async def insert_row(db, tablename, cols_values, columnnames=None):
@@ -161,8 +160,6 @@ async def insert_row(db, tablename, cols_values, columnnames=None):
     colnames, bindings = zip(*((k, v) for k, v in cols_values.items()))
     sqlito = f"insert into {tablename} ({','.join(colnames)}) values ({','.join(['?']*len(bindings))})"
     db.execute(sqlito, bindings)
-    db.commit()
-
 
 
 def _convert_to_dict(cols_values):
@@ -173,16 +170,16 @@ def _convert_to_dict(cols_values):
     return cols_values
 
 
-def _normalize_time(s):
+def normalize_time_of_day(s):
     """Normalizes"""
-    s = s.trim()
+    s = s.strip()
     if s:
         return dateutil.parser.parse(s).strftime("%H:%M:%S")
     return ""
 
 
-def _validate_time(s):
-    s = s.trim()
+def validate_time_of_day(s):
+    s = s.strip()
     try:
         if s:
             dateutil.parser.parse(s)

@@ -10,12 +10,12 @@ class DBServerCommands_FileSQLite(DBServerCommands):
     """"Low-level" access to FileSQLite object."""
 
     @is_command
-    async def s_commit(self):
+    async def commit(self):
         """Commits the current transaction."""
         self.dbfile.commit()
 
     @is_command
-    async def s_execute(self, statement, bindings=(), rowformat="dict", flag_commit=False):
+    async def execute(self, statement, bindings=(), rowformat="dict", flag_commit=False):
         """Executes SQLite statement.
 
         Args:
@@ -33,7 +33,7 @@ class DBServerCommands_FileSQLite(DBServerCommands):
         return _format_cursor(cursor, rowformat)
 
     @is_command
-    async def s_executemany(self, statement, bindings=(), flag_commit=False):
+    async def executemany(self, statement, bindings=(), flag_commit=False):
         """Executes SQLite statement repeatedly for each row in bindings.
 
         Args:
@@ -47,17 +47,17 @@ class DBServerCommands_FileSQLite(DBServerCommands):
         if flag_commit: self.dbfile.commit()
 
     @is_command
-    async def s_get_scalar(self, *args, **kwargs):
+    async def get_scalar(self, *args, **kwargs):
         """Executes statement that presumably fetches one row containing one column."""
         return self.dbfile.get_scalar(*args, **kwargs)
 
     @is_command
-    async def s_get_singlecolumn(self, *args, **kwargs):
+    async def get_singlecolumn(self, *args, **kwargs):
         """Executes statement that presumably feches one column per row."""
         return self.dbfile.get_singlecolumn(*args, **kwargs)
 
     @is_command
-    async def s_get_singlerow(self, statement, bindings=(), rowformat="dict"):
+    async def get_singlerow(self, statement, bindings=(), rowformat="dict"):
         """Executes statement that presumably feches one row only. **Does** raise if rowcount != 1"""
         _ret = self.dbfile.execute(statement, bindings).fetchall()
         if len(_ret) != 1:
@@ -66,17 +66,17 @@ class DBServerCommands_FileSQLite(DBServerCommands):
         return ret
 
     @is_command
-    async def s_describe(self, tablename, rowformat="dict"):
+    async def describe(self, tablename, rowformat="dict"):
         """Making up for the lack of SQL "describe" command."""
         return _format_cursor(self.dbfile.describe(tablename), rowformat)
 
     @is_command
-    async def s_show_tables(self, rowformat="dict"):
+    async def show_tables(self, rowformat="dict"):
         """Making up for the lack of SQL "show tables" statement."""
         return _format_cursor(self.dbfile.show_tables(), rowformat)
 
     @is_command
-    async def s_create_database(self, flag_overwrite=False):
+    async def create_database(self, flag_overwrite=False):
         """Creates database if it does not exist or if forced overwriting. **Careful**"""
         flag_overwrite = a107.to_bool(flag_overwrite)
         self.dbfile.create_database(flag_overwrite=flag_overwrite)

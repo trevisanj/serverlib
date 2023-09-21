@@ -38,7 +38,8 @@ class Intelligence(_api.WithClosers):
 
     @property
     def client(self):
-        if isinstance(self.master, sl.Client): return self.master
+        if isinstance(self.master, sl.Client):
+            return self.master
         return None
 
     def __init__(self, master=None, cfg=None):

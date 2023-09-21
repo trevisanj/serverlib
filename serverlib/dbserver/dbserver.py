@@ -19,7 +19,7 @@ class DBServer(sl.Server):
     @property
     def dbpath(self):
         """Returns the path to the shelf file."""
-        return self.filepath(".sqlite")
+        return self.filepath("sqlite", ".sqlite")
 
     def __init__(self, *args, fileclass=None, flag_shelf=False, **kwargs):
         sl.Server.__init__(self, *args, **kwargs)

@@ -51,11 +51,12 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
         _api.WithClosers.__init__(self)
         _api.WithSleepers.__init__(self)
 
-
         self.__state = ServerState.INIT
         self.__loops = None  # {methodname0: task0, ...}
         self.__subservers = _get_scpairs(subservers)
         self.__state = ServerState.ALIVE
+
+        self.name = a107.random_name()
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # ┌─┐┬  ┬┌─┐┬─┐┬─┐┬┌┬┐┌─┐  ┌┬┐┌─┐
@@ -69,7 +70,7 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
         """Do be inherited in subclasses which are part of serverlib."""
 
     async def _on_getd_all(self, statedict):
-        """Inherit this to add elements to statedict in response to server command "s_getd_all"."""
+        """Inherit this to add elements to statedict in response to server command "getd_all"."""
 
     async def _do_getd_all(self, statedict):
         """

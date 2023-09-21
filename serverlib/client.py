@@ -26,6 +26,7 @@ class Client(sl.Console):
 
         self.__ctx, self.__socket = None, None
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # INTERFACE
 
     # async def connect(self):
@@ -74,6 +75,7 @@ class Client(sl.Console):
         finally:
             self.temporarytimeout = None
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDEN
 
     async def _initialize_client(self):
@@ -86,7 +88,7 @@ class Client(sl.Console):
                                    f'(\'{self.subappname}\' x \'{server_subappname}\')')
 
     async def _get_server_subappname(self):
-        srvcfg = await self.__execute_server_no_init("s_getd_cfg")
+        srvcfg = await self.__execute_server_no_init("getd_cfg")
         ret = srvcfg["_subappname"]
         if ret is None:
             ret = srvcfg["_appname"]
@@ -96,7 +98,7 @@ class Client(sl.Console):
         return await self._get_server_subappname()
 
     async def _get_welcome(self):
-        return await self.execute_server("s_get_welcome")
+        return await self.execute_server("get_welcome")
 
     async def _do_close(self):
         if self.__socket is not None:
@@ -141,6 +143,7 @@ class Client(sl.Console):
             # Note: it is not the best way to send the list of favourites to the server ... but whatever
             return _api.format_method(await self.execute_server("s_help", commandname, fav=self.fav))
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # PRIVATE
 
     def __make_socket(self):
@@ -150,8 +153,6 @@ class Client(sl.Console):
         self.__set_timeout(self.cfg.timeout)
         self.logger.info(f"Connecting {self.name}, ``{self.subappname}(client)'', to {self.url} ...")
         self.__socket.connect(self.url)
-
-
 
     def __set_timeout(self, timeout):
         zmqtimeout = int(timeout*1000)  # ZMQ needs timeout in milliseconds
@@ -218,7 +219,6 @@ class Client(sl.Console):
 
         ret = process_result(b)
         return ret
-
 
     def __del_socket(self):
         if self.__socket is not None:

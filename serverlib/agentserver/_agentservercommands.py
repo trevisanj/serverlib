@@ -5,11 +5,11 @@ from . import agentserver
 
 class AgentServerCommands(sl.DBServerCommands):
     @sl.is_command
-    async def s_get_agentnames(self):
+    async def get_agentnames(self):
         return list(self.master.agents.keys())
 
     @sl.is_command
-    async def s_run_asap(self, task):
+    async def run_asap(self, task):
         """
         Configures task(s) to be executed as soon as possible.
 
@@ -55,27 +55,46 @@ class AgentServerCommands(sl.DBServerCommands):
             self.server.review_agents()
 
     @sl.is_command
-    async def s_getd_tasks(self, where=""):
+    async def getd_tasks(self, where=""):
         """Returns list-of-dicts containing all task table columns."""
         if where: where = " where "+where
         ret = [dict(row) for row in self.dbfile.execute(f"select * from task{where}")]
         return ret
 
     @sl.is_command
-    async def s_insert_task(self, command, agentname, time_of_day, interval, **kwargs):
+    async def insert_task(self, command, agentname, time_of_day, interval, flag_commit=True, **kwargs):
+        """
+        Inserts task
+
+        Args:
+            command:
+            agentname:
+            time_of_day:
+            interval:
+            flag_commit:
+            kwargs:
+
+        returns:
+            None
+        """
+        flag_commit = a107.to_bool(flag_commit)
         taskcommands = self.master.get_new_taskcommands()
         if not hasattr(taskcommands, command) or not hasattr(getattr(taskcommands, command), "__call__"):
             raise ValueError(f"Invalid command '{command}'")
 
         cols_values = {"command": command, "agentname": agentname, "time_of_day": time_of_day, "interval": interval,}
         cols_values.update(kwargs)
+        if "state" not in cols_values:
+            cols_values["state"] = sl.TaskState.idle
 
         await sl.insert_row(db=self.dbfile,
                             tablename="task",
                             cols_values=cols_values)
+        if flag_commit:
+            self.dbfile.commit()
 
     @sl.is_command
-    async def s_update_task(self, taskid, *cols_values):
+    async def update_task(self, taskid, *cols_values):
         """Updates columns for identified task.
 
         Args:

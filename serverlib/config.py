@@ -17,7 +17,7 @@ class config:
     """
     Serverlib configuration
 
-    Values are accessible through the server command "s_getd_all".
+    Values are accessible through the server command "getd_all".
     """
 
     # --- Data Root: diretory to store all serverlib data

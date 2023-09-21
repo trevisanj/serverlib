@@ -41,7 +41,9 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
         self.__state = CSt.ALIVE
 
         self.name = a107.random_name()
+        self.laststatement = None
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # DATA MODEL
 
     async def __aenter__(self):
@@ -51,7 +53,12 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
         if self.__state < CSt.CLOSED:
             await self.close()
 
+
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # INTERFACE
+
+    async def initialize(self):
+        await self._assure_initialized()
 
     async def execute(self, statement, *args, **kwargs):
         if isinstance(statement, bytes):
@@ -95,6 +102,8 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
         self.__set_historylength()
         print(await self._get_welcome())
         prompt = await self._get_prompt()
+
+        # This is the console loop
         self.__state = CSt.LOOP
         try:
             while True:
@@ -139,11 +148,13 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
         await _api.WithClosers.close(self)
         self.__state = CSt.CLOSED
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDABLE
 
     async def _on_initialize(self):
         pass
 
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDED BY Client CLASS ONY
 
     async def _initialize_client(self):
@@ -192,7 +203,8 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
             return _api.format_method(_api.make_helpitem(self.metacommands[commandname], True, self.fav))
         raise sl.NotAConsoleCommand(f"Not a {self.whatami} command: '{commandname}'")
 
-    # PROTECTED (NOT OVERRIDABLE)
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    # PROTECTED FINAL
 
     async def _get_help_specialgroup(self):
         """Returns the help "special group"; called by Console and Client."""
@@ -204,6 +216,7 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
 
     def _parse_statement(self, statement, args, kwargs):
         self._statementdata = _capi.parse_statement(statement, args, kwargs)
+        self.laststatement = statement
         return self._statementdata
 
     async def _assure_initialized(self):
@@ -213,8 +226,6 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
             await self._initialize_client()
             await self._on_initialize()
             self.__state = CSt.INITIALIZED
-
-    # PRIVATE
 
     async def _execute_console(self):
         data = self._statementdata
@@ -227,6 +238,9 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
         else:
             ret = method(*data.args, **data.kwargs)
         return ret
+
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    # PRIVATE
 
     def __write_history(self):
         path_ = self.historypath

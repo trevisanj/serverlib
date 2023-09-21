@@ -68,7 +68,7 @@ async def start_if_not(script, client_or_cfg):
     client, _, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
     try:
         client.temporarytimeout = 2
-        await client.execute_server('s_ping')
+        await client.execute_server('ping')
     except sl.Retry:
         subprocess.Popen([script])
         ret = True
@@ -88,8 +88,8 @@ async def stop_if(client_or_cfg):
     client, _, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
     try:
         client.temporarytimeout = 2
-        await client.execute_server('s_ping')
-        await client.execute_server("s_stop")
+        await client.execute_server("ping")
+        await client.execute_server("stop")
         ret = True
     except sl.Retry:
         pass
@@ -144,7 +144,7 @@ async def cli_start_stop1(server_or_cfg, client_or_cfg):
         flag_started = False
         try:
             client.temporarytimeout = 2
-            await client.execute_server('s_ping')
+            await client.execute_server('ping')
         except sl.Retry:
             print(sys.argv[0])
             subprocess.Popen([sys.argv[0], "run"])
@@ -179,7 +179,7 @@ Descriptions of commands:
         elif args.command == "ping":
             try:
                 print(f"Pinging server (timeout={sl.config.defaultclienttimeout:g} seconds)...")
-                print(await client.execute_server('s_ping'))
+                print(await client.execute_server('ping'))
             except (KeyboardInterrupt, asyncio.CancelledError):
                 print("Interrupted")
             except sl.Retry:

@@ -3,6 +3,7 @@ __all__ = ["WithCommands"]
 import serverlib as sl, asyncio, a107
 from . import _misc
 
+
 class WithCommands:
     """This class enters as an ancestor for the Client and Server class in a multiple-inheritance composition."""
 
@@ -11,6 +12,8 @@ class WithCommands:
         self.cmd = {}
         # {commandname: Command, ...}, synthesized from all self.cmd
         self.metacommands = {}
+        # All command methods to be called easier
+        self.methods = _Methods()
 
         if cmd is not None:
             self._attach_cmd(cmd)
@@ -27,6 +30,13 @@ class WithCommands:
         **Note** This method may be called from __init__().
         """
 
+        def wrap_init_exec(method):
+            async def wrap_init_exec_(*args, **kwargs):
+                await self._assure_initialized()
+                return await method(*args, **kwargs)
+
+            return wrap_init_exec_
+
         def process_one_cmd(one_cmd):
             one_cmd.master = self
             self.cmd[one_cmd.title] = one_cmd
@@ -40,6 +50,7 @@ class WithCommands:
                                        f"class {tmp.method.__self__.__class__.__name__}.{name}() came first")
 
                 self.metacommands[name] = metacommand
+                setattr(self.methods, name, wrap_init_exec(metacommand.method))
 
         def process_many(list_of_cmds):
             for cmd in list_of_cmds:
@@ -55,3 +66,9 @@ class WithCommands:
                     process_one_cmd(cmd)
 
         process_many(cmds)
+
+
+# ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+class _Methods:
+    pass

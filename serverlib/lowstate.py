@@ -2,7 +2,7 @@ class lowstate:
     """
     Low-level server state
 
-    Values are accessible through the server command "s_getd_all".
+    Values are accessible through the server command "getd_all".
     """
 
     # Number of ZMQ sockets. DO NOT CHANGE!

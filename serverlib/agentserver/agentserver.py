@@ -53,8 +53,8 @@ class AgentServer(sl.DBServer):
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDE
 
-    def _do_getd_all(self, statedict):
-        super()._do_getd_all(self)
+    async def _do_getd_all(self, statedict):
+        await super()._do_getd_all(statedict)
         statedict["agents"] = list(self.__agents.keys())
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -251,13 +251,13 @@ class AgentServer(sl.DBServer):
                         if not taskids:
                             # 🕵 says: Probably all tasks were suspended, or even deleted, after I was spawned.
                             #          If this no-task situation persists, the server will soon kill me.
-                            agentlogger.debug(f"Got no tasks to run, so sleeping for a bit ...")
+                            agentlogger.debug(f"Got no tasks to care for, so sleeping for a bit ...")
 
                             await self.sleep(self.cfg.waittime_no_tasks, agentname)
                             continue
 
                         else:
-                            agentlogger.debug(f"Got {len(taskids)} tasks to run")
+                            agentlogger.debug(f"Got {len(taskids)} tasks to care for")
 
                         waittime, minnexttime, num_run = await run_tasks_sequentially(taskids, taskcommands)
 
