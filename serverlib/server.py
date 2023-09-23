@@ -105,15 +105,6 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
         """
         await self._run(0)
 
-    def get_welcome(self):
-        """Console welcome message."""
-        slugtitle = f"Welcome to the '{self.subappname}' {self.whatami}"
-        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
-        description = self.description
-        if description:
-            ret += "\n"+a107.kebab(description, config.descriptionwidth)
-        return ret
-
     def stop(self):
         """Stops server by cancelling all tasks in self.__loops"""
         if self.__loops is not None:
@@ -305,6 +296,7 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                 raise
 
             await self._initialize_cmd()
+            await self._initialize_closers()
             await self._do_initialize()
             await self._on_initialize()
             # MAIN LOOP ...
@@ -331,6 +323,10 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
                 sl.lowstate.numcontexts -= 1
         finally:
             self.logger.info(f"Exiting {self.__class__.__name__}.__mainloop()")
+
+    async def _assure_initialized(self):
+        """Initialize-on-demand, in server case will assert that server is initialized."""
+        assert self.__state == ServerState.LOOP
 
 
 def _get_scpairs(scpairs):

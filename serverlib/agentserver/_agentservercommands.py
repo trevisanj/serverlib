@@ -49,7 +49,7 @@ class AgentServerCommands(sl.DBServerCommands):
             # Tries to wake up specific agents involved
             for agentname in agentnames:
                 self.logger.debug(f"Trying to take up agent '{agentname}'")
-                self.server.wake_up(agentname)
+                self.server.wake_up(agentname, flag_raise=True)
         except KeyError:
             # If any agent is not found, better to review agents
             self.server.review_agents()
@@ -58,17 +58,17 @@ class AgentServerCommands(sl.DBServerCommands):
     async def getd_tasks(self, where=""):
         """Returns list-of-dicts containing all task table columns."""
         if where: where = " where "+where
-        ret = [dict(row) for row in self.dbfile.execute(f"select * from task{where}")]
+        ret = self.dbfile.get_lod(f"select * from task{where}")
         return ret
 
     @sl.is_command
-    async def insert_task(self, command, agentname, time_of_day, interval, flag_commit=True, **kwargs):
+    async def insert_task(self, agentname, command, time_of_day=None, interval=None, flag_commit=True, **kwargs):
         """
         Inserts task
 
         Args:
-            command:
             agentname:
+            command:
             time_of_day:
             interval:
             flag_commit:
@@ -81,6 +81,8 @@ class AgentServerCommands(sl.DBServerCommands):
         taskcommands = self.master.get_new_taskcommands()
         if not hasattr(taskcommands, command) or not hasattr(getattr(taskcommands, command), "__call__"):
             raise ValueError(f"Invalid command '{command}'")
+        if time_of_day is None and interval is None:
+            raise ValueError(f"Please specify at least one of the following: time_of_day, interval")
 
         cols_values = {"command": command, "agentname": agentname, "time_of_day": time_of_day, "interval": interval,}
         cols_values.update(kwargs)

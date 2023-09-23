@@ -172,6 +172,8 @@ def _convert_to_dict(cols_values):
 
 def normalize_time_of_day(s):
     """Normalizes"""
+    if s is None:
+        return s
     s = s.strip()
     if s:
         return dateutil.parser.parse(s).strftime("%H:%M:%S")
@@ -179,6 +181,8 @@ def normalize_time_of_day(s):
 
 
 def validate_time_of_day(s):
+    if s is None:
+        return True
     s = s.strip()
     try:
         if s:

@@ -4,7 +4,7 @@ __all__ = ["make_help", "make_helpdata", "HelpData", "HelpGroup", "HelpItem", "m
 from dataclasses import dataclass
 from typing import *
 from colored import fg, bg, attr
-import inspect, re, ansiwrap, math, shutil
+import inspect, re, ansiwrap, math, shutil, a107
 from . import _misc
 
 
@@ -18,9 +18,13 @@ STYLE_GROUPTITLE = fg("light_yellow")       # group title
 STYLE_NAME = attr("bold")+fg("light_gray")  # method name
 
 # How to distinguish between stared and non-stared methods
-FAVSTAR = attr("blink")+attr("bold")+fg("white")+"✺"+attr("reset")
+# Note: adjuts NOTFAV accordingly depending on the number of columns the FAVSTAR will take to render
+
+# FAVSTAR = attr("blink")+attr("bold")+fg("yellow")+"✺"+attr("reset")
 # FAVSTAR = "🌟"
-NOTFAV = " "
+FAVSTAR = "🌊"
+ANTIFAV = "❌"
+NOTFAV = "  "
 
 # ➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰➰
 # Data classes
@@ -32,6 +36,7 @@ class HelpItem:
     signature: inspect.Signature= None
     docstring: str = None
     flag_fav: bool = False
+    flag_antifav: bool = False
 
 
 @dataclass
@@ -56,11 +61,15 @@ class HelpData:
 
 def favthing(helpitem):
     """Returns text identifying method as favourite of else empty space(s) of same length."""
-    return NOTFAV if not helpitem.flag_fav else FAVSTAR
+    return (NOTFAV if not helpitem.flag_fav else FAVSTAR)+(NOTFAV if not helpitem.flag_antifav else ANTIFAV)
 
 
-def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, fav=None, favonly=False):
-    if fav is None: fav = []
+
+def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, fav=None, favonly=False, antifav=None):
+    if fav is None:
+        fav = []
+    if antifav is None:
+        antifav = []
     groups = []
     for commands in cmd.values():
         items = []
@@ -71,24 +80,28 @@ def make_groups(cmd, flag_protected=True, flag_docstrings=False, refilter=None, 
 
             flag_fav = metacommand.name.lower() in fav
 
-            if favonly and not flag_fav: continue
+            if favonly and not flag_fav:
+                continue
 
-            items.append(make_helpitem(metacommand, flag_docstrings, fav))
-        if items: groups.append(HelpGroup(commands.title, items))
+            items.append(make_helpitem(metacommand, flag_docstrings, fav, antifav))
+        if items:
+            groups.append(HelpGroup(commands.title, items))
     return groups
 
 
-def make_helpitem(metacommand, flag_docstrings, fav):
+def make_helpitem(metacommand, flag_docstrings, fav, antifav):
     flag_fav = metacommand.name.lower() in fav
+    flag_antifav = metacommand.name.lower() in antifav
     return HelpItem(metacommand.name,
                     metacommand.oneliner,
                     inspect.signature(metacommand.method),
                     docstring=None if not flag_docstrings else metacommand.method.__doc__,
-                    flag_fav=flag_fav)
+                    flag_fav=flag_fav,
+                    flag_antifav=flag_antifav)
 
 
 def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False, refilter=None, fav=None,
-                  favonly=False):
+                  favonly=False, antifav=None):
     """Assembles HelpData object from Server or Client instance.
 
     Args:
@@ -100,21 +113,22 @@ def make_helpdata(title, description, cmd, flag_protected, flag_docstrings=False
         refilter: regular expression. If passed, will filter commands containing this expression
         fav: list of favourites (command names)
         favonly: flag, whether to include only favourite items
+        antifav: list of antifavourites (command names)
 
     Returns: a HelpData instance
 
     """
-    groups = make_groups(cmd, flag_protected, flag_docstrings, refilter, fav, favonly)
+    groups = make_groups(cmd, flag_protected, flag_docstrings, refilter, fav, favonly, antifav)
     ret = HelpData(title, description, groups)
     return ret
 
 
-def make_help(title, description, cmd, flag_protected=True, refilter=None, fav=None):
+def make_help(title, description, cmd, flag_protected=True, refilter=None, fav=None, antifav=None):
     """Makes help text from Server or Client instance.
 
     See make_helpdata() for description on parameters
     """
-    helpdata = make_helpdata(title, description, cmd, flag_protected, refilter, fav)
+    helpdata = make_helpdata(title, description, cmd, flag_protected, refilter, fav, antifav)
     text = make_text(helpdata)
     return text
 
@@ -132,9 +146,13 @@ def make_text(helpdata, numcolumns=None, preferredcolumnwidth=90, spacer=" | "):
     def format_title(helpdata):
         return [f"{STYLE_TITLE}{helpdata.title}",
                 "="*len(helpdata.title)+attr("reset")]
+
+    def _format_description(s):
+        return f"{STYLE_DESCRIPTION}{s}{attr('reset')}"
+
     def format_description(s):
         # Returns as list to make it easier to implement text wrapping, if necessary.
-        return [f"{STYLE_DESCRIPTION}{s}{attr('reset')}"]
+        return [_format_description(s)]
 
     def format_grouptitle(group):
         return f"{STYLE_GROUPTITLE}{group.title}{attr('reset')}"
@@ -152,7 +170,9 @@ def make_text(helpdata, numcolumns=None, preferredcolumnwidth=90, spacer=" | "):
     methodlen = max([max([len(item.name) for item in helpgroup.items]+[0]) for helpgroup in helpdata.groups if len(helpgroup) > 0]+[0])
 
     lines = format_title(helpdata)
-    if helpdata.description: lines.extend(format_description(helpdata.description))
+    if helpdata.description:
+        kebab = a107.kebab(helpdata.description, columnwidth, "  ")
+        lines.extend([_format_description(line) for line in kebab.split("\n")])
     lines.append("")
 
     for helpgroup in helpdata.groups:
@@ -161,6 +181,8 @@ def make_text(helpdata, numcolumns=None, preferredcolumnwidth=90, spacer=" | "):
         for helpitem in helpgroup.items:
             lines.append(format_oneliner(helpitem))
 
+    numcolumns = 2
+
     if numcolumns == 1:
         return "\n".join(lines)
 
@@ -168,7 +190,11 @@ def make_text(helpdata, numcolumns=None, preferredcolumnwidth=90, spacer=" | "):
     for line in lines:
         wrapped = ansiwrap.wrap(line, columnwidth)
         for wrappedline in wrapped:
-            lines_.append(wrappedline+" "*(columnwidth-ansiwrap.ansilen(wrappedline)))
+            # favourite star discount using length of NOTFAV as reference
+            favd = len(NOTFAV)-1 if FAVSTAR in wrappedline else 0
+            antifavd = len(NOTFAV)-1 if ANTIFAV in wrappedline else 0
+            spaces = " "*(columnwidth-ansiwrap.ansilen(wrappedline)-favd-antifavd)
+            lines_.append(wrappedline+spaces)
     n = len(lines_)
     numrows = math.ceil(n/numcolumns)
     i = 0
@@ -179,7 +205,8 @@ def make_text(helpdata, numcolumns=None, preferredcolumnwidth=90, spacer=" | "):
         for j in range(numrows):
             _ret[j] += spacer_+lines_[i]
             i += 1
-            if i >= n: break
+            if i >= n:
+                break
         icol += 1
 
     return "\n".join(_ret)

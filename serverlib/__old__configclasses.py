@@ -312,6 +312,7 @@ class ClientConfig(ClientServerConfig, _WithHistory):
     Args:
         flag_ownidentify:
         fav: favourites list
+
     """
 
     loggingprefix = "C"

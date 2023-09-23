@@ -15,18 +15,45 @@ class EssentialConsoleCommands(sl.ConsoleCommands):
         return await self.help(favonly=True)
 
     @sl.is_command
-    async def fav(self, what):
-        """Toggles favourite command."""
-        fav = self.master.fav
-        what = str(what).lower()
-        if what in fav:
-            fav.remove(what)
-        else:
-            fav.append(what)
+    async def fav(self, what=None):
+        """Toggles favourite command and returns list
 
-        self.master.fav = fav
+        Args:
+            what: name of command to toggle
+
+        Returns:
+            ret: list of favourites
+        """
+        fav = self.master.fav
+
+        if what is not None:
+            what = str(what).lower()
+            if what in fav:
+                fav.remove(what)
+            else:
+                fav.append(what)
+            self.master.fav = fav
+
+        return fav
 
     @sl.is_command
-    async def get_fav(self):
-        """Return list of favourite commands."""
-        return self.master.fav
+    async def antifav(self, what=None):
+        """Toggles anti-favourite command and returns list
+
+        Args:
+            what: name of command to toggle
+
+        Returns:
+            ret: list of anti-favourites
+        """
+        antifav = self.master.antifav
+
+        if what is not None:
+            what = str(what).lower()
+            if what in antifav:
+                antifav.remove(what)
+            else:
+                antifav.append(what)
+            self.master.antifav = antifav
+
+        return antifav

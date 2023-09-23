@@ -142,7 +142,7 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
             return await self._do_help_what(what)
         else:
             refilter = None if what is None else what.replace("*", ".*")
-            return await self._do_help(refilter=refilter, fav=self.fav, favonly=favonly)
+            return await self._do_help(refilter=refilter, fav=self.fav, favonly=favonly, antifav=self.antifav)
 
     async def close(self):
         await _api.WithClosers.close(self)
@@ -168,21 +168,18 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
 
     async def _get_welcome(self):
         """Console welcome message."""
-        slugtitle = f"Welcome to the '{self.subappname}' {self.whatami}"
-        ret = "\n".join(a107.format_slug(slugtitle, random.randint(0, 2)))
-        description = self.description
-        if description:
-            ret += "\n"+a107.kebab(description, config.descriptionwidth)
-        return ret
 
-    async def _do_help(self, refilter=None, fav=None, favonly=False):
+        return self.get_welcome()
+
+    async def _do_help(self, refilter=None, fav=None, favonly=False, antifav=None):
         cfg = self.cfg
         helpdata = _api.make_helpdata(title=self.subappname,
                                       description=self.description,
                                       cmd=self.cmd, flag_protected=True,
                                       refilter=refilter,
                                       fav=fav,
-                                      favonly=favonly)
+                                      favonly=favonly,
+                                      antifav=antifav)
         if not refilter and not favonly:
             specialgroup = await self._get_help_specialgroup()
             helpdata.groups = [specialgroup]+helpdata.groups
@@ -200,7 +197,8 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
     async def _do_help_what(self, commandname):
         if commandname in self.metacommands:
 
-            return _api.format_method(_api.make_helpitem(self.metacommands[commandname], True, self.fav))
+            return _api.format_method(_api.make_helpitem(self.metacommands[commandname], True, self.fav,
+                                                         self.antifav))
         raise sl.NotAConsoleCommand(f"Not a {self.whatami} command: '{commandname}'")
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -220,9 +218,11 @@ class Console(_api.WithCommands, _api.WithClosers, _api.WithCfg, _api.WithConsol
         return self._statementdata
 
     async def _assure_initialized(self):
+        """Initialize-on-demand"""
         if self.__state < CSt.INITIALIZED:
             self.read_configfile()
             await self._initialize_cmd()
+            await self._initialize_closers()
             await self._initialize_client()
             await self._on_initialize()
             self.__state = CSt.INITIALIZED

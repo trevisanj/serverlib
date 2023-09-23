@@ -41,7 +41,7 @@ class WithCfg:
                 i -= 1+int(last_is_empty)  # does not take blank line before "Args:"
                 break
             last_is_empty = len(stripped) == 0
-        return "__doc__\n"+"\n".join(lines[:i+1])
+        return "__doc__\n\n"+"\n".join(lines[:i+1])
 
     @property
     def autodir(self):
@@ -100,6 +100,23 @@ class WithCfg:
         self.master = None
         self.__logger = None
         self.__autodir = None
+
+    def get_welcome(self):
+        """Standard welcome message."""
+        # LEFT = " * "
+        # slugtitle = f"Welcome to the '{self.subappname}' {self.whatami}"
+        # ret = "\n".join([f"{LEFT}{x}" for x in a107.format_slug(slugtitle, random.randint(0, 2))])
+        # description = self.description
+        # if description:
+        #     ret += "\n"+a107.kebab("\n"+description, config.descriptionwidth, LEFT)
+        # return ret
+        slugtitle = f"Welcome to the '{self.subappname}' {self.whatami}"
+        _ret = a107.format_slug(slugtitle, fmt=str)
+        description = self.description
+        if description:
+            _ret += "\n"+a107.kebab("\n"+description, config.descriptionwidth)
+        ret = a107.format_box(_ret, fmt=str)
+        return ret
 
     def get_new_sublogger(self, namesuffix):
         """Creates new logger with compounded name"""

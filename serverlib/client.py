@@ -117,15 +117,17 @@ class Client(sl.Console):
             ret = await self.__execute_server()
         return ret
 
-    async def _do_help(self, refilter=None, fav=None, favonly=None):
-        helpdata_server = await self.execute_server("s_help", refilter=refilter, fav=fav, favonly=favonly)
+    async def _do_help(self, refilter=None, fav=None, favonly=None, antifav=None):
+        helpdata_server = await self.execute_server("s_help", refilter=refilter, fav=fav, favonly=favonly,
+                                                    antifav=antifav)
         helpdata = _api.make_helpdata(title=self.subappname,
                                       description=self.description,
                                       cmd=self.cmd,
                                       flag_protected=True,
                                       refilter=refilter,
                                       fav=fav,
-                                      favonly=favonly)
+                                      favonly=favonly,
+                                      antifav=antifav)
         helpdata.groups = helpdata.groups+helpdata_server.groups
         if not refilter and not favonly:
             specialgroup = await self._get_help_specialgroup()
@@ -141,7 +143,8 @@ class Client(sl.Console):
             return await super()._do_help_what(commandname)
         except sl.NotAConsoleCommand:
             # Note: it is not the best way to send the list of favourites to the server ... but whatever
-            return _api.format_method(await self.execute_server("s_help", commandname, fav=self.fav))
+            return _api.format_method(await self.execute_server("s_help", commandname, fav=self.fav,
+                                                                antifav=self.antifav))
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # PRIVATE

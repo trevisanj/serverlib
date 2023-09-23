@@ -44,27 +44,8 @@ class WithClosers:
 
         self.__closers.append(closer)
 
-    async def _aappend_closers(self, *args, flag_initialize=True):
-        """Async version of _append_closers() with automatic initialization option."""
-        ret = []
-        for closers in args:
-            if not isinstance(closers, (list, tuple)): closers = [closers]
-            for closer in closers:
-                self.__append_closer(closer)
-                ret.append(closer)
-        assert len(ret) > 0, f"Nothing was passed to {self.__class__.__name__}._append_closers()"
-
-        if flag_initialize:
-            await asyncio.gather(*[closer.initialize() for closer in ret if hasattr(closer, "initialize")])
-
-        if len(ret) == 1:
-            return ret[0]
-        return ret
-
     _append_closer = _append_closers
     _append_closer.__name__ = "_append_closer"
-    _aappend_closer = _aappend_closers
-    _append_closers.__name__ = "_append_closers"
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # INHERITABLES
@@ -108,9 +89,38 @@ class WithClosers:
             if not inspect.iscoroutinefunction(method):
                 method()
             else:
-                awaitables.append(method())
+                await method()
 
-        await asyncio.gather(*awaitables)
+                # 20230922 using asyncio.gather() to initialize and close makes it harder to debug
+                # awaitables.append(method())
+
+        # await asyncio.gather(*awaitables)
         self.__flag_called_close = True
 
         self.logger.debug(f"{self.__class__.__name__} '{self.name}' finished closing itself")
+
+    # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    # FOR DESCENDANTS' INTERNAL USE
+
+    async def _initialize_closers(self):
+        awaitables = []
+        for closer in self.__closers:
+
+            if closer.__class__.__name__ == "ViriyaToolbox":
+                print("////////////////////////////////////////////////////////////////////////////////////////")
+
+            # debug
+            name = f"'{closer.name}'" if hasattr(closer, "name") else id(closer)
+            msg =f">>>>> {self.__class__.__name__} '{self.name}' WILL INITIALIZE {closer.__class__.__name__} {name}"
+            self.logger.debug(msg)
+
+            try:
+                method = closer.initialize
+
+                if not inspect.iscoroutinefunction(method):
+                    method()
+                else:
+                    await method()
+            except AttributeError:
+                pass
+

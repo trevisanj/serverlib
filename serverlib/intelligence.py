@@ -62,8 +62,19 @@ class Intelligence(_api.WithClosers):
 
     async def initialize(self):
         """Initializes. May be called only once."""
-        assert not self.__flag_initialized
+
+        assert not self.__flag_initialized, f"{self.__class__.__name__} '{self.name}' already initialized!"
+
+        self.logger.debug(f">>>>>>>>>>> {self.__class__.__name__} '{self.name}' is initializing initialing")
+
+        # This method order allows "closers" to be added inside _on_initialize(),
+        # then they will be automatically inside _initialize_closers()
         await self._on_initialize()
+        await self._initialize_closers()
+
+        self.logger.debug(f"<<<<<<<<<<< {self.__class__.__name__} '{self.name}' finished initialing")
+
+        self.__flag_initialized = True
 
     async def ensure_initialized(self):
         """Initializes if not so yet."""

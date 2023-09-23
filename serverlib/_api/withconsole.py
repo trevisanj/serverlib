@@ -25,6 +25,14 @@ class WithConsole:
     def fav(self, value):
         self.shelf["fav"] = value
 
+    @property
+    def antifav(self):
+        return self.shelf.get("antifav", [])
+
+    @antifav.setter
+    def antifav(self, value):
+        self.shelf["antifav"] = value
+
     def __init__(self):
         path_ = self.shelfpath
         dir_, _ = os.path.split(path_)

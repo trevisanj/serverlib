@@ -20,7 +20,7 @@ class BasicServerCommands(ServerCommands):
         return self.master.subappname
 
     @is_command
-    async def s_help(self, what=None, flag_docstrings=False, refilter=None, fav=None, favonly=False):
+    async def s_help(self, what=None, flag_docstrings=False, refilter=None, fav=None, favonly=False, antifav=None):
         """Gets summary of available server commands or help on specific command.
 
         Args:
@@ -29,6 +29,7 @@ class BasicServerCommands(ServerCommands):
             refilter: regular expression. If passed, will filter commands containing this expression
             fav: favourites list
             favonly: flag, whether to include only favourite items
+            antifav: antifavourites list
 
         Returns:
             serverlib.HelpData or serverlib.HelpItem
@@ -41,12 +42,13 @@ class BasicServerCommands(ServerCommands):
                                           flag_docstrings=flag_docstrings,
                                           refilter=refilter,
                                           fav=fav,
-                                          favonly=favonly)
+                                          favonly=favonly,
+                                          antifav=antifav)
             return helpdata
         else:
             if what not in self.master.metacommands:
                 raise ValueError("Invalid method: '{}'".format(what))
-            helpitem = _api.make_helpitem(self.master.metacommands[what], True, fav)
+            helpitem = _api.make_helpitem(self.master.metacommands[what], True, fav, antifav)
             return helpitem
 
     @is_command

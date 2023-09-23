@@ -48,7 +48,7 @@ class AgentServer(sl.DBServer):
 
     def review_agents(self):
         """Causes agents to be reviewed asap."""
-        self.wake_up(self.SLEEPERNAME)
+        self.wake_up(self.SLEEPERNAME, flag_raise=False)
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDE
@@ -134,8 +134,6 @@ class AgentServer(sl.DBServer):
                 num_run: number of tasks run
             """
 
-            waiter = sl.Waiter(self, description="Failed task", sleepername=agentname, logger=agentlogger)
-
             nexttimes = []
             num_run = 0
             for taskid in taskids:
@@ -153,10 +151,10 @@ class AgentServer(sl.DBServer):
                     num_run += 1
                     flag_success = await run_task(task, taskcommands)
                     if flag_success:
-                        waiter.reset()
+                        waiter_f.reset()
                     else:
                         # will wait progressively longer at each failed task
-                        await waiter.wait()
+                        await waiter_f.wait()
 
                 nexttimes.append(task.nexttime)
 
@@ -190,7 +188,7 @@ class AgentServer(sl.DBServer):
                 method = getattr(taskcommands, task.command)
                 signature = inspect.signature(method)
                 if len(signature.parameters) == 0:
-                    await method()  # task does not care about the task object
+                    await method()
                 elif len(signature.parameters) == 1:
                     await method(task)
                 else:
@@ -237,6 +235,8 @@ class AgentServer(sl.DBServer):
         # === BEGIN agent life
 
         agentlogger = self.get_new_sublogger(f"agent.{agentname}")
+        # controls waiting in case of failed task
+        waiter_f = sl.Waiter(self, description="Failed task", sleepername=agentname, logger=agentlogger)
 
         try:
             # dbclient = self.get_dbclient()

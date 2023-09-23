@@ -14,13 +14,15 @@ class WithSleepers:
     def __init__(self):
         self.__sleepers = {}  # {name: _Sleeper, ...}
 
-    def wake_up(self, sleepername=None):
+    def wake_up(self, sleepername=None, flag_raise=True):
         """Cancel all "naps" created with self.sleep(), or specific one specified by sleepername."""
         if sleepername is not None:
             try:
                 self.__sleepers[sleepername].flag_wake_up = True
             except KeyError:
                 self.logger.debug(f"Sleeper '{sleepername}' not found")
+                if flag_raise:
+                    raise
         else:
             for sleeper in self.__sleepers.values():
                 sleeper.flag_wake_up = True
