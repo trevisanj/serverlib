@@ -25,7 +25,10 @@ def is_app(cls):
 
 
 def is_subapp(appcfgcls):
-    """Used to decorate subapp config class."""
+    """Used to decorate subapp config class
+
+    Makes -- without overwriting -- attributes _appname, _subappname, loggingleve, flag_log_file, flag_log_console
+    """
 
     def copy_attrs(subappcfgcls):
         if not issubclass(subappcfgcls, sl.ServerCfg):
@@ -36,13 +39,21 @@ def is_subapp(appcfgcls):
         if not subappcfgcls._subappname:
             subappcfgcls._subappname = subappcfgcls.__name__
 
+        for name in ["logginglevel", "flag_log_file", "flag_log_console"]:
+            if hasattr(appcfgcls, name) and (not hasattr(subappcfgcls, name) or not getattr(subappcfgcls, name)):
+                setattr(subappcfgcls, name, getattr(appcfgcls, name))
+
         return subappcfgcls
 
     return copy_attrs
 
 
 def is_client(servercfgcls):
-    """Decorator a cfg class which has client relation to servercls"""
+    """Decorator a cfg class which has client relation to servercls
+
+    Makes -- without overwriting -- attributes _appname, _subappname, loggingleve, flag_log_file, flag_log_console
+
+    """
 
     def copy_attrs(clientcfgcls):
         if not issubclass(clientcfgcls, sl.ClientCfg):
@@ -50,8 +61,13 @@ def is_client(servercfgcls):
 
         clientcfgcls.port = servercfgcls.port
         clientcfgcls._appname = servercfgcls._appname
+
         if hasattr(servercfgcls, "_subappname"):
             clientcfgcls._subappname = servercfgcls._subappname
+
+        for name in ["logginglevel", "flag_log_file", "flag_log_console"]:
+            if hasattr(servercfgcls, name) and (not hasattr(clientcfgcls, name) or not getattr(clientcfgcls, name)):
+                setattr(clientcfgcls, name, getattr(servercfgcls, name))
 
         return clientcfgcls
 

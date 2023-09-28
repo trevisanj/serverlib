@@ -119,39 +119,13 @@ def result2str(ret, logger, flag_colors=True):
     return output
 
 
-_powertabulatemap = [
-    {"fieldnames": ("whenthis", "startts", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
-     "converter": lambda x: a107.dt2str(a107.to_datetime(x)), },
-    # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
-    {"fieldnames": ("period",),
-     "converter": pl3.QP.to_str},
-    {"fieldnames": ("error", "lasterror",),
-     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
-    {"fieldnames": ("narration",),
-     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
-    {"fieldnames": ("flag",),
-     "converter": lambda x: str(x)}
-]
-
 
 def _powertabulate(rows, header, logger, *args, **kwargs):
 
-    mymap = [[[i for i, h in enumerate(header)
-               if any(h.startswith(prefix) for prefix in row["fieldnames"])], row["converter"]] for row in
-             _powertabulatemap]
-    mymap = [row for row in mymap if row[0]]
-    if mymap:
-        for row in rows:
-            for indexes, converter in mymap:
-                for i in indexes:
-                    try:
-                        if row[i] is not None: row[i] = converter(row[i])
-                    except BaseException as e:
-                        logger().error(f"Error '{a107.str_exc(e)}' while trying to apply convertion to field "
-                                      f"'{header[i]}' with value {repr(row[i])}")
-                        raise
+    sl.convert_rows(rows, header, logger)
 
     return tabulate.tabulate(rows, header, *args, floatfmt="f", **kwargs)
+
 
 
 def _detect_girafales(s):

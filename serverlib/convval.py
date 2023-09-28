@@ -1,20 +1,21 @@
 """
-Conversion and validation of arguments
-
-Plugin-based
+Plugin-capable conversion and validation of arguments
 
 Based on ancient sacca::convert_and_validate_args.py
-
+20230927 conversion for printing ("powertabulate") moved here for reuse in HTML generation
 """
-__all__ = ["convert_values", "update_row", "validate_values", "convert_and_validate",
-           "converters", "validators", "insert_row", "normalize_time_of_day", "validate_time_of_day"]
 
-import inspect, a107
+__all__ = ["convert_values", "update_row", "validate_values", "convert_and_validate",
+           "converters", "validators", "insert_row", "normalize_time_of_day", "validate_time_of_day",
+           "convert_rows", "powertabulatemap"]
+
+import inspect, a107, pl3, textwrap
 import dateutil
 
 
 def _convert_whenthis(whenthis):
-    if whenthis is None: return None
+    if whenthis is None:
+        return None
     return a107.to_ts_utc(whenthis)
 
 
@@ -190,3 +191,42 @@ def validate_time_of_day(s):
     except ValueError:
         return False
     return True
+
+
+# ======================================================================================================================
+# POWERTABULATE part
+
+
+powertabulatemap = [
+    {"fieldnames": ("whenthis", "startts", "ts", "ts0", "ts1", "lasttime", "nexttime", "whenthisenter", "whenthisexit"),
+     "converter": lambda x: a107.dt2str(a107.to_datetime(x)), },
+    # "converter": lambda x: a107.ts2str(x, tz=a107.utc)},
+    {"fieldnames": ("period",),
+     "converter": pl3.QP.to_str},
+    {"fieldnames": ("error", "lasterror",),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
+    {"fieldnames": ("narration", "memo"),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 50))},
+    {"fieldnames": ("hash",),
+     "converter": lambda x: "\n".join(textwrap.wrap(x, 40))},
+    {"fieldnames": ("flag",),
+     "converter": lambda x: str(x)}
+]
+
+
+def convert_rows(rows, header, logger):
+    mymap = [[[i for i, h in enumerate(header)
+               if any(h.startswith(prefix) for prefix in row["fieldnames"])], row["converter"]] for row in
+             powertabulatemap]
+    mymap = [x for x in mymap if x[0]]
+    if mymap:
+        for row in rows:
+            for indexes, converter in mymap:
+                for i in indexes:
+                    try:
+                        if row[i] is not None:
+                            row[i] = converter(row[i])
+                    except BaseException as e:
+                        logger.error(f"Error '{a107.str_exc(e)}' while trying to apply convertion to field "
+                                       f"'{header[i]}' with value {repr(row[i])}")
+                        raise

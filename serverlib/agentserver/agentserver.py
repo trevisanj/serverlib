@@ -67,15 +67,17 @@ class AgentServer(sl.DBServer):
         async def review_agents():
 
             # --- Checks if any agent finished and/or crashed
-            # (agent crashes are unusual, usually a bug, as agents shouldn't crash)
-            for name, agent in self.__agents.items():
+            # must create list to iterate because self.__agents changes inside loop
+            for name in list(self.__agents):
+                agent = self.__agents[name]
                 if agent.done():
                     # Note: "If the Task has been cancelled, this method raises a CancelledError exception."
                     # https://docs.python.org/3/library/asyncio-task.html
                     e = agent.exception()
                     if e:
+                        # (agent crashes are unusual, usually a bug, as agents shouldn't crash)
                         raise e
-                    del self.__agents[name]
+                    del self.__agents[agent.name]
 
             # --- Spawns (and/or kills) new agents as needed
             existingnames = list(self.__agents.keys())
