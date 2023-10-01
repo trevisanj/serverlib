@@ -64,7 +64,8 @@ class config:
         # key: whatami
         prefixes = {"server": "S",
                     "client": "C",
-                    "console": "O"}
+                    "console": "O",
+                    "app": "A"}
         colors = {
             lggng.DEBUG: fg("light_gray"),
             lggng.INFO: fg("cyan"),

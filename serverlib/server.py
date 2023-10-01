@@ -56,8 +56,6 @@ class Server(_api.WithCfg, _api.WithCommands, _api.WithClosers, _api.WithSleeper
         self.__subservers = _get_scpairs(subservers)
         self.__state = ServerState.ALIVE
 
-        self.name = a107.random_name()
-
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # ┌─┐┬  ┬┌─┐┬─┐┬─┐┬┌┬┐┌─┐  ┌┬┐┌─┐
     # │ │└┐┌┘├┤ ├┬┘├┬┘│ ││├┤   │││├┤

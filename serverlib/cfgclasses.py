@@ -1,9 +1,10 @@
 """
-All serverlib "cfg" classes in one file.
+All serverlib "cfg" classes.
 
-Attributes starting with "_" ("protected") are not written to configuration file.
-
-All time values are in seconds.
+Notes:
+    1. **These classes are not made to be instantiated!**
+    2. Attributes starting with "_" ("protected") are not written to configuration file
+    3. All time values are in seconds
 """
 
 __all__ = ["BaseCfg", "ConsoleCfg", "ServerCfg", "ClientCfg", "AgentCfg"]
@@ -13,6 +14,7 @@ import logging
 
 class BaseCfg:
     """Base class for all "cfg" objects"""
+
     _appname = None
     _subappname = None
     # logging configuration is set to None so that WithCfg.__create_logger() will take defaults

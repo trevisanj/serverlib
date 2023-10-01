@@ -84,7 +84,7 @@ class WithClosers:
                 raise AttributeError(f"Class {closer.__class__.__name__} does not have close()/Close() method")
 
             # debug
-            name = f"'closer.name'" if hasattr(closer, "name") else id(closer)
+            name = f"'{closer.name}'" if hasattr(closer, "name") else id(closer)
             self.logger.debug(f"{self.__class__.__name__} '{self.name}' is closing {closer.__class__.__name__} {name}")
             if not inspect.iscoroutinefunction(method):
                 method()

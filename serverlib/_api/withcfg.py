@@ -22,7 +22,9 @@ class WithCfg:
     """
 
     # Suffix to show on certain occasions ("server"/"client"/"console")
-    whatami: str = ""
+    # todo cleanup 20231001 defaulted this to "app" in order to be able to use this class without console/client/server
+    #  (I wrote this note do be deleted but may be kept perhaps)
+    whatami: str = "app"
 
     @property
     def description(self):
@@ -94,12 +96,15 @@ class WithCfg:
 
         return self.__logger
 
-    def __init__(self, cfg, description=""):
+    def __init__(self, cfg, description="", autodir=None):
+        # todo there is something wrong with the description, explicit class description setting is overriding the property!!!
         self.__description = description
         self.cfg = cfg
         self.master = None
         self.__logger = None
-        self.__autodir = None
+        self.__autodir = autodir
+
+        self.name = a107.random_name()
 
     def get_welcome(self):
         """Standard welcome message."""
@@ -172,6 +177,7 @@ class WithCfg:
         Both files will be used if present; settings in (2) may ovewrite settings in (1) above.
         """
 
+        # todo reimplement this
         self.logger.warning("read_configfile() no longer implemented")
         return
 
@@ -219,9 +225,9 @@ class WithCfg:
     def __get_configobj_with_path(self, path_, flag_create_empty):
         """Gets config for specific file path."""
 
+        # todo reimplement this
         self.logger.warning("__get_configobj_with_path() no longer implemented")
         return
-
 
         flag_exists = os.path.isfile(path_)
         ret = configobj.ConfigObj(path_, create_empty=flag_create_empty, unrepr=True)
@@ -233,9 +239,9 @@ class WithCfg:
     def __get_configobj(self):
         """Gets config in local path or in configuration directory, whichever is found first."""
 
+        # todo reimplement this
         self.logger.warning("__get_configobj() no longer implemented")
         return
-
 
         localpath = os.path.join(".", self.configfilename)
         if os.path.isfile(localpath):

@@ -77,7 +77,7 @@ class AgentServer(sl.DBServer):
                     if e:
                         # (agent crashes are unusual, usually a bug, as agents shouldn't crash)
                         raise e
-                    del self.__agents[agent.name]
+                    del self.__agents[name]
 
             # --- Spawns (and/or kills) new agents as needed
             existingnames = list(self.__agents.keys())

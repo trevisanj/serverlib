@@ -62,7 +62,7 @@ async def start_if_not(script, client_or_cfg):
     Calls script if poke is unsuccessful.
 
     Returns:
-        whether or not started the server
+        whether the server was started
     """
     ret = False
     client, _, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
