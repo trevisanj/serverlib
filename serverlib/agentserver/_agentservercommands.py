@@ -96,22 +96,28 @@ class AgentServerCommands(sl.DBServerCommands):
             self.dbfile.commit()
 
     @sl.is_command
-    async def update_task(self, taskid, *cols_values):
-        """Updates columns for identified task.
-
-        Args:
-            taskid: existing value for task's 'id' field
-            *cols_values: pairs of arguments: (columnname0, value0, columnname1, value1, ...)
-        """
+    async def update_task(self, taskid, **cols_values):
+        """Updates columns for identified task"""
         db = self.dbfile
-        await sl.update_row(db=db,
-                            tablename="task",
-                            id_=taskid,
-                            cols_values=cols_values,
-                            columnnames=None)
+        try:
+            await sl.update_row(db=db,
+                                tablename="task",
+                                id_=taskid,
+                                cols_values=cols_values,
+                                columnnames=None)
 
-        task = self.master.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (taskid,)))
-        self.master.calculate_nexttime(task)
+            task = self.master.AgentTask(**self.dbfile.get_singlerow("select * from task where id=?", (taskid,)))
+            self.master.calculate_nexttime(task)
 
-        db.execute("update task set nexttime=? where id=?", (task.nexttime, task.id))
+            db.execute("update task set nexttime=? where id=?", (task.nexttime, task.id))
+            db.commit()
+        except:
+            db.rollback()
+
+    @sl.is_command
+    async def delete_task(self, taskid):
+        """Deletes task identified by taskid"""
+
+        db = self.dbfile
+        db.execute("delete from task where id=?", (taskid,))
         db.commit()

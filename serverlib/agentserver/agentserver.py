@@ -19,6 +19,7 @@ class AgentServer(sl.DBServer):
     def agents(self):
         return self.__agents
 
+    # todo cleanup
     # @property
     # def sleepername(self):
     #     return self.__sleepername
@@ -71,7 +72,8 @@ class AgentServer(sl.DBServer):
             for name in list(self.__agents):
                 agent = self.__agents[name]
                 if agent.done():
-                    # Note: "If the Task has been cancelled, this method raises a CancelledError exception."
+                    # Note: "If the Task has been cancelled, this method [task.done()] raises a
+                    # CancelledError exception."
                     # https://docs.python.org/3/library/asyncio-task.html
                     e = agent.exception()
                     if e:
@@ -125,12 +127,10 @@ class AgentServer(sl.DBServer):
         """
 
         # ──────────────────────────────────────────────────────────────
-        async def run_tasks_sequentially(taskids, taskcommands):
-            # async def run_tasks_sequential(self, tasks, dbclient, taskcommands, agentname):
-
+        async def run_tasks_sequentially():
             """Tasks are executed sequentially.
 
-            Returns: (waittime, minnexttime)
+            Returns: (waittime, minnexttime, num_run)
                 waittime: time to wait until this method should be called again (seconds); or if preferred,
                 minnexttime: minimum next time among all tasks run
                 num_run: number of tasks run
@@ -153,9 +153,12 @@ class AgentServer(sl.DBServer):
                     num_run += 1
                     flag_success = await run_task(task, taskcommands)
                     if flag_success:
+                        # waiter is reset when task succeeds
                         waiter_f.reset()
                     else:
                         # will wait progressively longer at each failed task
+                        agentlogger.info(f"Task #{task.id} failed, "
+                                         f"will wait {waiter_f.nexttime:.2f} seconds before running next task")
                         await waiter_f.wait()
 
                 nexttimes.append(task.nexttime)
@@ -238,7 +241,8 @@ class AgentServer(sl.DBServer):
 
         agentlogger = self.get_new_sublogger(f"agent.{agentname}")
         # controls waiting in case of failed task
-        waiter_f = sl.Waiter(self, description="Failed task", sleepername=agentname, logger=agentlogger)
+        waiter_f = sl.Waiter(self, description="Failed task", sleepername=agentname, logger=agentlogger,
+                             flag_quiet=True)
 
         try:
             # dbclient = self.get_dbclient()
@@ -261,7 +265,7 @@ class AgentServer(sl.DBServer):
                         else:
                             agentlogger.debug(f"Got {len(taskids)} tasks to care for")
 
-                        waittime, minnexttime, num_run = await run_tasks_sequentially(taskids, taskcommands)
+                        waittime, minnexttime, num_run = await run_tasks_sequentially()
 
                         if num_run == 0:
                             await self.sleep(self.cfg.waittime_no_tasks, agentname)
@@ -310,7 +314,3 @@ class AgentServer(sl.DBServer):
 
     SLEEPERNAME = "__agentloop"
     __FLAG_KILL = False
-
-
-
-
