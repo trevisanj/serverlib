@@ -190,6 +190,7 @@ class AgentServer(sl.DBServer):
             await es(lasterror="", result=TaskResult.none, state=TaskState.in_progress, lasttime=time.time())
 
             try:
+                # Runs task here
                 method = getattr(taskcommands, task.command)
                 signature = inspect.signature(method)
                 if len(signature.parameters) == 0:

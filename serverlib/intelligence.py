@@ -69,7 +69,8 @@ class Intelligence(_api.WithClosers):
 
         # This method order allows "closers" to be added inside _on_initialize(),
         # then they will be automatically inside _initialize_closers()
-        assert inspect.iscoroutinefunction(self._on_initialize)
+        assert inspect.iscoroutinefunction(self._on_initialize), \
+            f"{self.__class__.__name__}._on_initialize() must be async!"
         await self._on_initialize()
         await self._initialize_closers()
 
