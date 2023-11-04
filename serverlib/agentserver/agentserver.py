@@ -51,6 +51,23 @@ class AgentServer(sl.DBServer):
         """Causes agents to be reviewed asap."""
         self.wake_up(self.SLEEPERNAME, flag_raise=False)
 
+    async def kill_agents(self):
+        """Kills all agents."""
+        names = list(self.__agents.keys())
+
+        for name in names:
+            await self.kill_agent(name)
+
+    async def kill_agent(self, name):
+        self.logger.debug(f"Killing agent '{name}'")
+        try:
+            task = self.__agents[name]
+            task.cancel()
+            await asyncio.wait_for(task, timeout=sl.config.killagenttimeout)
+            del self.__agents[name]
+        except KeyError:
+            self.logger.debug(f"Agent '{name}' is already dead")
+
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDE
 

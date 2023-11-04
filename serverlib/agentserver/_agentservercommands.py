@@ -9,6 +9,19 @@ class AgentServerCommands(sl.DBServerCommands):
         return list(self.master.agents.keys())
 
     @sl.is_command
+    async def suspend_all(self):
+        """Kills all agents and suspends all tasks."""
+
+        await self.master.kill_agents()
+
+
+
+        db = self.dbfile
+        db.execute("update task set state = ?", (sl.TaskState.suspended,))
+        db.commit()
+
+
+    @sl.is_command
     async def run_asap(self, task):
         """
         Configures task(s) to be executed as soon as possible.

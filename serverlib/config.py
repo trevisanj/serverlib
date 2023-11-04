@@ -42,6 +42,7 @@ class config:
     # -- Other configuration
     # Description width in welcome message
     descriptionwidth = 100
+    killagenttimeout = 30
 
     # -- Exclusive access console shelf
     # lock timeout
