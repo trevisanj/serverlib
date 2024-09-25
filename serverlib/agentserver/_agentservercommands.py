@@ -6,6 +6,8 @@ from . import agentserver
 class AgentServerCommands(sl.DBServerCommands):
     @sl.is_command
     async def get_agentnames(self):
+        """Returns names of alive agents"""
+
         return list(self.master.agents.keys())
 
     @sl.is_command
@@ -13,8 +15,6 @@ class AgentServerCommands(sl.DBServerCommands):
         """Kills all agents and suspends all tasks."""
 
         await self.master.kill_agents()
-
-
 
         db = self.dbfile
         db.execute("update task set state = ?", (sl.TaskState.suspended,))

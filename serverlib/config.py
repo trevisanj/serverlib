@@ -29,7 +29,7 @@ class config:
     # environment variable to define data root before running application
     datarootenvvar = "SERVERLIB_DATAROOT"
     # default data root
-    defaultdataroot = "~/.serverlib"
+    defaultdataroot = "~/serverlib-data"
 
     # -- Default configuration for serverlib.Waiter instances
     # initial waiting time (seconds)

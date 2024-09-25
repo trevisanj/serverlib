@@ -1,6 +1,6 @@
 __all__ = ["DBServer"]
 
-import serverlib as sl, shelve
+import serverlib as sl, shelve, os, a107
 
 class DBServer(sl.Server):
     """SQLite database server with shelf ("shelve") option
@@ -37,6 +37,10 @@ class DBServer(sl.Server):
 
     async def _do_initialize(self):
         if self.dbfile:
+            d, f = os.path.split(self.dbpath)
+            if a107.ensure_path(d):
+                self.logger.info(f"Created directory '{d}'")
+
             self.dbfile.create_database()
 
     async def _on_close(self):
