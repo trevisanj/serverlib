@@ -24,12 +24,21 @@ class AgentServer(sl.DBServer):
     # def sleepername(self):
     #     return self.__sleepername
 
-    def __init__(self, *args, taskcommandsgetter, taskclass=None, **kwargs):
+    def __init__(self, *args, taskcommandsgetter, taskclass=None, after_tasks_time=None, **kwargs):
+        """
+        Agent server
+
+        Args:
+            after_tasks_time: if passed, will call _after_tasks() once some task is executed successfully
+                              and there is no task in progress for after_tasks_time
+        """
         from ._agentservercommands import AgentServerCommands
 
         super().__init__(*args, **kwargs)
 
         assert issubclass(self.cfg, sl.AgentCfg)
+
+        self.after_tasks_time = after_tasks_time
 
         if taskclass is None:
             taskclass = self.AgentTask
@@ -40,6 +49,12 @@ class AgentServer(sl.DBServer):
         # {agentname: (loop task), ...}
         self.__agents = {}
         self._attach_cmd(AgentServerCommands())
+
+    # INHERITABLE
+
+    def _after_tasks(self):
+        """Called once some task is executed successfully and there is no task in progress for after_tasks_time"""
+        pass
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # INTERFACE
@@ -67,6 +82,11 @@ class AgentServer(sl.DBServer):
             del self.__agents[name]
         except KeyError:
             self.logger.debug(f"Agent '{name}' is already dead")
+
+    def _has_any_in_progress(self):
+        n = self.dbfile.get_scalar("select count(*) from task where state=?", (TaskState.in_progress,))
+        ret = n > 0
+        return ret
 
     # ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
     # OVERRIDE
@@ -120,10 +140,21 @@ class AgentServer(sl.DBServer):
                 if newname not in existingnames:
                     self.logger.debug(f"Spawning agent '{newname}'")
                     self.__agents[newname] = asyncio.create_task(self.__agentlife(newname), name=newname)
+
+
+        self._last_finished_time = None
+
         try:
             while True:
                 try:
                     await review_agents()
+
+                    if self.after_tasks_time:
+                        self.logger.debug("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+                        if self._last_finished_time and time.time()-self._last_finished_time >= self.after_tasks_time:
+                            self._after_tasks()
+                            self._last_finished_time = None
+
                 except sl.Retry as e:
                     waittime = self.cfg.waittime_retry_task if e.waittime is None else e.waittime
                     await self.sleep(waittime, self.SLEEPERNAME)
@@ -172,6 +203,8 @@ class AgentServer(sl.DBServer):
                     if flag_success:
                         # waiter is reset when task succeeds
                         waiter_f.reset()
+                        self._last_finished_time = time.time()
+
                     else:
                         # will wait progressively longer at each failed task
                         agentlogger.info(f"Task #{task.id} failed, "

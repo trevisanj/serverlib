@@ -69,9 +69,17 @@ def print_result(ret, logger, flag_colors=True):
             print(text)
 
         def handle_status(arg):
-            msg = arg.msg if not isinstance(arg.msg, (list, tuple)) else "\n".join(arg.msg)
+            msg = arg.msg
             if msg:
-                print(f"{format_header('Status:')} {a107.fancilyquoted(msg)}")
+                is_str = isinstance(msg, str)
+                msgtitle = "Status message"+("" if is_str else "s")+":"
+                ll = [f"{attr('bold')}{msgtitle}{attr('reset')}"]
+                if is_str:
+                    ll.append(a107.fancilyquoted(msg))
+                else:
+                    ll.extend([f"• {s}" for s in msg])
+                ll.extend(["", f"{attr('bold')}Status result{attr('reset')}:"])
+                print("\n".join(ll))
             handle_all(arg.ret, level+1)
 
         def handle_default(arg):
