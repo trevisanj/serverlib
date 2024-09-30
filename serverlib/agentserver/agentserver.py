@@ -219,7 +219,7 @@ class AgentServer(sl.DBServer):
 
         # ────────────────────────────────────
         async def run_task(task, taskcommands):
-            """Exception handling center. Supresses all exceptions except CancelledError
+            """Exception handling center. Treats all exceptions except CancelledError, which is re-raised
 
             Returns:
                 flag_success
@@ -242,14 +242,22 @@ class AgentServer(sl.DBServer):
             try:
                 # Runs task here
                 method = getattr(taskcommands, task.command)
-                signature = inspect.signature(method)
-                if len(signature.parameters) == 0:
-                    await method()
-                elif len(signature.parameters) == 1:
-                    await method(task)
-                else:
-                    raise AssertionError(f"(Invalid signature for {taskcommands.__class__.__name__}.{method.__name__}()"
-                                         f" (possibilities are: `()` or `(task)`, not `{str(signature)}`)")
+
+                await method(task)
+
+                # I started to use wrappers which mess with the ability to determine the signature of the original
+                # "task command", therefore commenting out this of #todo cleanup
+                #
+                # signature = inspect.signature(method)
+                # await method(task)
+                #
+                # if len(signature.parameters) == 0:
+                #     await method()
+                # elif len(signature.parameters) == 1:
+                #     await method(task)
+                # else:
+                #     raise AssertionError(f"(Invalid signature for {taskcommands.__class__.__name__}.{method.__name__}()"
+                #                          f" (possibilities are: `()` or `(task)`, not `{str(signature)}`)")
 
             except (asyncio.CancelledError):
                 # If cancelled, sets task to be run again asap
@@ -325,7 +333,7 @@ class AgentServer(sl.DBServer):
 
                     except sl.Retry as e:
                         waittime = self.cfg.waittime_retry_task if e.waittime is None else e.waittime
-                        agentlogger.error(f"{A} Error: {a107.str_exc(e)} (will retry in {waittime} seconds)")
+                        agentlogger.error(f"{a107.str_exc(e)} (will retry in {waittime} seconds)")
                         await self.sleep(waittime, agentname)
                         continue
 

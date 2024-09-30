@@ -153,9 +153,8 @@ async def cli_start_stop1(server_or_cfg, client_or_cfg):
 
     client, cfg, flag_instantiated = sl.get_client_and_cfg(client_or_cfg)
     try:
-
-        # Here we are trusting the client to be matchin the server subappname
-        servername = cfg.subappname
+        # Here we are trusting the client to be matching the server's _subappname
+        servername = cfg._subappname
 
         description = \
 f"""'{servername}' server control
