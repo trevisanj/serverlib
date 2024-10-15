@@ -48,7 +48,7 @@ def get_client_and_cfg(client_or_cfg):
     if isinstance(client_or_cfg, sl.Client):
         client = client_or_cfg
         cfg = client.cfg
-    elif isinstance(client_or_cfg, sl.ClientCfg):
+    elif issubclass(client_or_cfg, sl.ClientCfg):
         cfg = client_or_cfg
         client = sl.Client(cfg=cfg)
         flag_instantiated = True
